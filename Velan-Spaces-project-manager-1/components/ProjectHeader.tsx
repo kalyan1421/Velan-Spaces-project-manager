@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Project, UserRole, Worker } from '../types';
-import { Card, Button, Input } from './Layouts';
-import { Briefcase, User, Calendar, Users, MapPin, Phone, Mail, Edit2, X, Save, Hash } from 'lucide-react';
-import { updateProject, subscribeToGlobalWorkers } from '../services/firebase';
+import { Project, UserRole, Worker, Manager } from '../types';
+import { Card, Button, Input, Badge } from './Layouts';
+import { Briefcase, User, Calendar, Users, MapPin, Phone, Mail, Edit2, X, Save, Hash, UserCog, Plus, Trash2 } from 'lucide-react';
+import { updateProject, subscribeToGlobalWorkers, subscribeToGlobalManagers } from '../services/firebase';
 
 interface ProjectHeaderProps {
     project: Project;
@@ -29,13 +29,16 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({ project, role }) =
         clientEmail: project.clientEmail || '',
         clientAddress: project.clientAddress || '',
         clientNotes: project.clientNotes || '',
-        location: project.location
+        location: project.location,
+        managerIds: project.managerIds || []
     });
     const [globalWorkers, setGlobalWorkers] = useState<Worker[]>([]);
+    const [globalManagers, setGlobalManagers] = useState<Manager[]>([]);
 
     useEffect(() => {
-        const unsub = subscribeToGlobalWorkers(setGlobalWorkers);
-        return () => unsub();
+        const unsub1 = subscribeToGlobalWorkers(setGlobalWorkers);
+        const unsub2 = subscribeToGlobalManagers(setGlobalManagers);
+        return () => { unsub1(); unsub2(); };
     }, []);
 
     // Calculate timeline info
@@ -63,6 +66,17 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({ project, role }) =
         return workerNames || `${assignedCount} workers`;
     };
 
+    // Get managers info
+    const getManagersInfo = () => {
+        const assignedCount = project.managerIds?.length || 0;
+        if (assignedCount === 0) return 'No manager assigned';
+        const managerNames = project.managerIds?.map(id => {
+            const manager = globalManagers.find(m => m.id === id);
+            return manager?.name;
+        }).filter(Boolean);
+        return managerNames?.join(', ') || `${assignedCount} manager(s)`;
+    };
+
     const handleSaveProject = async () => {
         await updateProject(project.id, {
             projectName: editData.projectName,
@@ -71,17 +85,27 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({ project, role }) =
             clientEmail: editData.clientEmail,
             clientAddress: editData.clientAddress,
             clientNotes: editData.clientNotes,
-            location: editData.location
+            location: editData.location,
+            managerIds: editData.managerIds
         });
         setIsEditModalOpen(false);
-        alert('Project details updated!');
+    };
+
+    const addManager = (managerId: string) => {
+        if (managerId && !editData.managerIds.includes(managerId)) {
+            setEditData({ ...editData, managerIds: [...editData.managerIds, managerId] });
+        }
+    };
+
+    const removeManager = (managerId: string) => {
+        setEditData({ ...editData, managerIds: editData.managerIds.filter(id => id !== managerId) });
     };
 
     const canEdit = role === 'HEAD' || role === 'MANAGER';
 
     return (
         <>
-            <Card className="mb-8">
+        <Card className="mb-8">
                 <div className="flex justify-between items-start mb-4">
                     <div className="flex items-center gap-2">
                         <span className="bg-neutral-900 text-white text-xs font-mono px-2 py-1 rounded">{project.id}</span>
@@ -93,9 +117,10 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({ project, role }) =
                         </Button>
                     )}
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <InfoCard icon={<User size={20} />} title="Client" value={project.clientName} />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                <InfoCard icon={<User size={20} />} title="Client" value={project.clientName} />
                     <InfoCard icon={<MapPin size={20} />} title="Location" value={project.location} />
+                    <InfoCard icon={<UserCog size={20} />} title="Manager" value={getManagersInfo()} />
                     <InfoCard icon={<Calendar size={20} />} title="Timeline" value={getTimelineInfo()} />
                     <InfoCard icon={<Users size={20} />} title="Workers" value={getWorkersInfo()} />
                 </div>
@@ -155,6 +180,54 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({ project, role }) =
                                 </div>
                             </div>
 
+                            {/* Manager Assignment Section */}
+                            <div className="pb-4 border-b border-neutral-100">
+                                <h4 className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-3">Assigned Managers</h4>
+                                <div className="space-y-3">
+                                    {/* Current Managers */}
+                                    <div className="flex flex-wrap gap-2">
+                                        {editData.managerIds.length === 0 ? (
+                                            <p className="text-sm text-neutral-400">No managers assigned</p>
+                                        ) : (
+                                            editData.managerIds.map(managerId => {
+                                                const manager = globalManagers.find(m => m.id === managerId);
+                                                return (
+                                                    <div key={managerId} className="flex items-center gap-2 bg-neutral-100 px-3 py-1.5 rounded-full">
+                                                        <span className="text-sm font-medium">{manager?.name || managerId}</span>
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => removeManager(managerId)}
+                                                            className="text-neutral-400 hover:text-red-500 transition-colors"
+                                                        >
+                                                            <X size={14}/>
+                                                        </button>
+                                                    </div>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+                                    {/* Add Manager Dropdown */}
+                                    <div className="flex gap-2">
+                                        <select 
+                                            className="flex-1 p-2.5 border rounded-xl text-sm bg-white"
+                                            onChange={(e) => {
+                                                addManager(e.target.value);
+                                                e.target.value = '';
+                                            }}
+                                            defaultValue=""
+                                        >
+                                            <option value="" disabled>+ Add Manager</option>
+                                            {globalManagers
+                                                .filter(m => !editData.managerIds.includes(m.id))
+                                                .map(manager => (
+                                                    <option key={manager.id} value={manager.id}>{manager.name}</option>
+                                                ))
+                                            }
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
                             {/* Client Info Section */}
                             <div className="pb-4">
                                 <h4 className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-3">Client Information</h4>
@@ -201,8 +274,8 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({ project, role }) =
                                     <Save size={14}/> Save Changes
                                 </Button>
                             </div>
-                        </div>
-                    </Card>
+            </div>
+        </Card>
                 </div>
             )}
         </>

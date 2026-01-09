@@ -134,7 +134,7 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
       associatedWorkerIds: selectedUpdateWorkerIds,
       roomId: selectedRoomIdForUpdate // New: Add roomId to update
     });
-    setNewUpdateText(''); setUpdateFile(null); setSelectedUpdateWorkerIds([]); setSelectedRoomIdForUpdate(undefined); setIsUploading(false); alert('Update Posted');
+    setNewUpdateText(''); setUpdateFile(null); setSelectedUpdateWorkerIds([]); setSelectedRoomIdForUpdate(undefined); setIsUploading(false);
   };
 
   const handleAddDesign = async (e: React.FormEvent) => {
@@ -168,7 +168,8 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
           if(selectedWorkerId) await assignWorkerToProject(project.id, selectedWorkerId);
       } else {
           await addGlobalWorker(newWorkerData);
-          alert('Worker Created. Please select them from the list now.');
+          // Worker created successfully
+          
           setWorkerMode('select');
       }
       setIsWorkerModalOpen(false);
@@ -831,7 +832,7 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
                         <Button onClick={() => setIsPhaseModalOpen(true)} variant="primary" className="flex items-center gap-2">
                             <Plus size={16}/> Add Phase
                         </Button>
-                        <Button onClick={() => updateTimeline(project.id, phases).then(() => alert('Timeline Saved'))} variant="accent">
+                        <Button onClick={() => updateTimeline(project.id, phases)} variant="accent">
                             Save All
                         </Button>
                     </>
