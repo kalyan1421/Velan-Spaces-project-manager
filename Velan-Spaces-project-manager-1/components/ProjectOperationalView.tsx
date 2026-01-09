@@ -53,6 +53,7 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
   // --- SETTLEMENT TAB STATE ---
   const [isSettlementModalOpen, setIsSettlementModalOpen] = useState(false);
   const [settlementData, setSettlementData] = useState<Partial<Settlement>>({ mode: 'Cash', paidToType: 'Worker' });
+  const [settlementProofFile, setSettlementProofFile] = useState<File | null>(null);
 
   // --- ROOM TAB STATE ---
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
@@ -177,13 +178,32 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
 
   const handleAddSettlement = async (e: React.FormEvent) => {
       e.preventDefault();
+      setIsUploading(true);
+      
+      let proofUrl = settlementData.screenshotUrl || '';
+      
+      // Upload proof file if provided
+      if (settlementProofFile) {
+          try {
+              proofUrl = await uploadProjectFile(settlementProofFile, project.id);
+          } catch (error) {
+              console.error(error);
+              alert("Error uploading proof file");
+              setIsUploading(false);
+              return;
+          }
+      }
+      
       await addSettlement(project.id, {
           ...settlementData,
+          screenshotUrl: proofUrl,
           createdBy: currentUserId,
           projectId: project.id
       });
       setIsSettlementModalOpen(false);
       setSettlementData({ mode: 'Cash', paidToType: 'Worker' });
+      setSettlementProofFile(null);
+      setIsUploading(false);
   };
 
   const handleAddRoom = async (e: React.FormEvent) => {
@@ -618,9 +638,13 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
                                   </td>
                                   <td className="p-4"><Badge color="neutral">{s.mode}</Badge></td>
                                   <td className="p-4 text-neutral-600 max-w-xs truncate">{s.description}</td>
-                                  <td className="p-4 text-right font-mono font-bold">${s.amount.toLocaleString()}</td>
+                              <td className="p-4 text-right font-mono font-bold">₹{s.amount.toLocaleString()}</td>
                                   <td className="p-4 text-center">
-                                      {s.screenshotUrl && <a href={s.screenshotUrl} target="_blank" className="text-accent-hover hover:underline text-xs">View</a>}
+                                      {s.screenshotUrl && (
+                                          <a href={s.screenshotUrl} target="_blank" className="text-accent-hover hover:underline text-xs flex items-center gap-1 justify-center">
+                                              <Image size={14}/> View Proof
+                                          </a>
+                                      )}
                                   </td>
                               </tr>
                           ))}
@@ -650,11 +674,50 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
                                <Input label="Paid To (Name)" value={settlementData.paidToName || ''} onChange={(e:any) => setSettlementData({...settlementData, paidToName: e.target.value})} required />
                                <Input label="Amount" type="number" value={settlementData.amount || ''} onChange={(e:any) => setSettlementData({...settlementData, amount: Number(e.target.value)})} required />
                                <Input label="Description" value={settlementData.description || ''} onChange={(e:any) => setSettlementData({...settlementData, description: e.target.value})} required />
-                               <Input label="Proof URL" value={settlementData.screenshotUrl || ''} onChange={(e:any) => setSettlementData({...settlementData, screenshotUrl: e.target.value})} />
+                               
+                               {/* Proof Upload Section */}
+                               <div>
+                                   <label className="block text-xs font-bold text-neutral-400 uppercase mb-2">Proof of Payment</label>
+                                   <div className="space-y-2">
+                                       {/* File Upload */}
+                                       <div className="border-2 border-dashed border-neutral-200 rounded-lg p-4 text-center">
+                                           <input 
+                                               type="file" 
+                                               accept="image/*,.pdf"
+                                               onChange={(e) => setSettlementProofFile(e.target.files?.[0] || null)} 
+                                               className="hidden" 
+                                               id="settlement-proof-file"
+                                           />
+                                           <label htmlFor="settlement-proof-file" className="cursor-pointer text-sm text-neutral-500 flex flex-col items-center gap-2">
+                                               <Paperclip size={20}/>
+                                               {settlementProofFile ? (
+                                                   <span className="text-primary font-medium">{settlementProofFile.name}</span>
+                                               ) : (
+                                                   <span>Click to upload image or PDF</span>
+                                               )}
+                                           </label>
+                                       </div>
+                                       {/* OR Divider */}
+                                       <div className="flex items-center gap-2">
+                                           <div className="flex-1 h-px bg-neutral-200"></div>
+                                           <span className="text-xs text-neutral-400 uppercase">OR</span>
+                                           <div className="flex-1 h-px bg-neutral-200"></div>
+                                       </div>
+                                       {/* URL Input */}
+                                       <Input 
+                                           label="Proof URL (Optional)" 
+                                           placeholder="https://..."
+                                           value={settlementData.screenshotUrl || ''} 
+                                           onChange={(e:any) => setSettlementData({...settlementData, screenshotUrl: e.target.value})} 
+                                       />
+                                   </div>
+                               </div>
                                
                                <div className="flex justify-end gap-2 mt-6">
-                                  <Button variant="ghost" onClick={() => setIsSettlementModalOpen(false)}>Cancel</Button>
-                                  <Button type="submit" variant="primary">Record</Button>
+                                  <Button variant="ghost" onClick={() => { setIsSettlementModalOpen(false); setSettlementProofFile(null); }}>Cancel</Button>
+                                  <Button type="submit" variant="primary" disabled={isUploading}>
+                                      {isUploading ? 'Uploading...' : 'Record'}
+                                  </Button>
                                </div>
                           </form>
                       </Card>
@@ -687,19 +750,19 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
                     <p className="text-neutral-400 text-xs font-bold uppercase tracking-widest mb-2">Total Estimated</p>
                     {editBudgetMode ? 
                         <input className="bg-neutral-800 text-2xl font-bold w-full p-2 rounded" type="number" value={tempBudget.cost} onChange={e => setTempBudget({...tempBudget, cost: Number(e.target.value)})}/> :
-                        <p className="text-3xl font-serif">${project.estimatedCost.toLocaleString()}</p>
+                        <p className="text-3xl font-serif">₹{project.estimatedCost.toLocaleString()}</p>
                     }
                 </Card>
                 <Card className="bg-accent text-primary border-none">
                     <p className="text-primary/60 text-xs font-bold uppercase tracking-widest mb-2">Approved Budget</p>
                     {editBudgetMode ? 
                         <input className="bg-yellow-300/50 text-2xl font-bold w-full p-2 rounded text-black" type="number" value={tempBudget.budget} onChange={e => setTempBudget({...tempBudget, budget: Number(e.target.value)})}/> :
-                        <p className="text-3xl font-serif">${project.budget.toLocaleString()}</p>
+                        <p className="text-3xl font-serif">₹{project.budget.toLocaleString()}</p>
                     }
                 </Card>
                 <Card className={`${health === 'red' ? 'bg-red-50 border-red-200' : health === 'yellow' ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200'}`}>
                      <p className={`${health === 'red' ? 'text-red-800' : health === 'yellow' ? 'text-yellow-800' : 'text-green-800'} text-xs font-bold uppercase tracking-widest mb-2`}>Remaining</p>
-                     <p className={`text-3xl font-serif ${health === 'red' ? 'text-red-600' : health === 'yellow' ? 'text-yellow-700' : 'text-green-700'}`}>${remaining.toLocaleString()}</p>
+                     <p className={`text-3xl font-serif ${health === 'red' ? 'text-red-600' : health === 'yellow' ? 'text-yellow-700' : 'text-green-700'}`}>₹{remaining.toLocaleString()}</p>
                 </Card>
             </div>
             
@@ -710,9 +773,9 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
                     <div className="h-full bg-primary" style={{ width: `${Math.min((project.currentSpend / project.budget) * 100, 100)}%` }}></div>
                 </div>
                 <div className="flex justify-between text-xs font-bold text-neutral-400 mt-2 uppercase tracking-wider">
-                    <span>$0</span>
-                    <span>Current: ${project.currentSpend.toLocaleString()}</span>
-                    <span>Budget: ${project.budget.toLocaleString()}</span>
+                    <span>₹0</span>
+                    <span>Current: ₹{project.currentSpend.toLocaleString()}</span>
+                    <span>Budget: ₹{project.budget.toLocaleString()}</span>
                 </div>
             </div>
         </div>

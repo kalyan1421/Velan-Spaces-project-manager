@@ -110,7 +110,7 @@ const ProjectCreationWizard = ({ onClose, managers }: { onClose: () => void, man
                                  <p className="text-neutral-500 text-sm">Set the initial budget goals for {data.projectName}</p>
                              </div>
                              <div className="grid grid-cols-2 gap-6">
-                                 <Input label="Approved Budget ($)" type="number" placeholder="0" value={data.budget || ''} onChange={(e:any) => setData({...data, budget: e.target.value})} />
+                                 <Input label="Approved Budget (₹)" type="number" placeholder="0" value={data.budget || ''} onChange={(e:any) => setData({...data, budget: e.target.value})} />
                              </div>
                              <div className="flex items-center mt-4">
                                 <input
@@ -196,7 +196,7 @@ const HeadDashboard = ({ onLogout }: { onLogout: () => void }) => {
                                 <div className="flex justify-between items-center border-t border-neutral-100 pt-4">
                                     <div>
                                         <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Budget</p>
-                                        <p className="font-mono font-bold text-primary">${p.budget.toLocaleString()}</p>
+                                        <p className="font-mono font-bold text-primary">₹{p.budget.toLocaleString()}</p>
                                     </div>
                                     <div className="w-8 h-8 rounded-full bg-neutral-50 flex items-center justify-center group-hover:bg-accent transition-colors">
                                         <ChevronRight size={16}/>
