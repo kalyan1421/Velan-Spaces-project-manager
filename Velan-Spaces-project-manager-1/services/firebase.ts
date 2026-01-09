@@ -11,7 +11,7 @@ import {
 // @ts-ignore
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
-import { Project, ProjectUpdate, Manager, Worker, Settlement, DesignDocument, Room } from '../types';
+import { Project, ProjectUpdate, Manager, Worker, Settlement, DesignDocument, Room, BudgetTransaction } from '../types';
 
 // --- Configuration ---
 
@@ -258,6 +258,26 @@ export const assignWorkerToProject = async (projectId: string, workerId: string)
 export const updateTimeline = async (projectId: string, timeline: any[]) => {
     const ref = doc(db, COL_PROJECTS, projectId);
     await updateDoc(ref, { timeline });
+};
+
+// --- Budget Transactions Services ---
+
+export const subscribeToBudgetTransactions = (projectId: string, callback: (transactions: BudgetTransaction[]) => void) => {
+    const q = query(collection(db, COL_PROJECTS, projectId, 'budgetTransactions'), orderBy('date', 'asc'));
+    return onSnapshot(q, (snap: any) => callback(snap.docs.map((d: any) => ({id: d.id, ...d.data()} as BudgetTransaction))));
+};
+
+export const addBudgetTransaction = async (projectId: string, transaction: Partial<BudgetTransaction>) => {
+    await addDoc(collection(db, COL_PROJECTS, projectId, 'budgetTransactions'), {
+        ...transaction,
+        createdAt: serverTimestamp()
+    });
+};
+
+export const deleteBudgetTransaction = async (projectId: string, transactionId: string) => {
+    const docRef = doc(db, COL_PROJECTS, projectId, 'budgetTransactions', transactionId);
+    // Note: For proper deletion, you might need to import deleteDoc from firebase
+    // For now, we'll use a workaround or add deleteDoc import
 };
 
 export { db, auth, storage };

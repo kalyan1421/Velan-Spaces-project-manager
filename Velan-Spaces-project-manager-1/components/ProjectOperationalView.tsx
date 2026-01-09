@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Project, ProjectUpdate, UserRole, TimelinePhase, TimelineTask, Worker, Settlement, DesignDocument, Manager, Room } from '../types';
+import { Project, ProjectUpdate, UserRole, TimelinePhase, TimelineTask, Worker, Settlement, DesignDocument, Manager, Room, BudgetTransaction } from '../types';
 import { 
     subscribeToUpdates, addUpdate, updateTimeline, 
     assignWorkerToProject, subscribeToGlobalWorkers, addGlobalWorker,
     subscribeToSettlements, addSettlement,
     subscribeToDesigns, addDesign, updateDesignStatus, updateProjectFinancials,
-    uploadProjectFile, subscribeToRooms, addRoom, updateRoom
+    uploadProjectFile, subscribeToRooms, addRoom, updateRoom,
+    subscribeToBudgetTransactions, addBudgetTransaction
 } from '../services/firebase';
 import { Card, Button, Input, Badge } from './Layouts';
-import { Send, Image, FileText, DollarSign, MessageSquare, Clock, Users, Plus, Trash2, CheckCircle, AlertCircle, Briefcase, Download, ArrowUpRight, Paperclip, X, Video, Home, ChevronDown, ChevronRight, Calendar, Target, Edit2 } from 'lucide-react';
+import { Send, Image, FileText, DollarSign, MessageSquare, Clock, Users, Plus, Trash2, CheckCircle, AlertCircle, Briefcase, Download, ArrowUpRight, Paperclip, X, Video, Home, ChevronDown, ChevronRight, Calendar, Target, Edit2, TrendingUp, TrendingDown } from 'lucide-react';
 import { format, isSameDay, differenceInDays, isPast, isToday } from 'date-fns';
 
 interface Props {
@@ -65,6 +66,15 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
   // --- BUDGET TAB STATE ---
   const [editBudgetMode, setEditBudgetMode] = useState(false);
   const [tempBudget, setTempBudget] = useState({ cost: project.estimatedCost, budget: project.budget });
+  const [budgetTransactions, setBudgetTransactions] = useState<BudgetTransaction[]>([]);
+  const [budgetSubTab, setBudgetSubTab] = useState<'credited' | 'debited'>('credited');
+  const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
+  const [newTransactionData, setNewTransactionData] = useState<Partial<BudgetTransaction>>({
+    type: 'CREDIT',
+    date: '',
+    accountDetails: '',
+    amount: 0
+  });
 
   // --- TIMELINE TAB STATE ---
   const [expandedPhases, setExpandedPhases] = useState<string[]>([]);
@@ -100,8 +110,9 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
     const unsub2 = subscribeToDesigns(project.id, setDesigns);
     const unsub3 = subscribeToSettlements(project.id, setSettlements);
     const unsub4 = subscribeToGlobalWorkers(setGlobalWorkers);
-    const unsub5 = subscribeToRooms(project.id, setRooms); // New: Subscribe to rooms
-    return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); };
+    const unsub5 = subscribeToRooms(project.id, setRooms);
+    const unsub6 = subscribeToBudgetTransactions(project.id, setBudgetTransactions);
+    return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); };
   }, [project.id]);
 
   // --- Handlers ---
@@ -727,57 +738,248 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
       );
   };
 
+  const handleAddTransaction = async () => {
+    if (!newTransactionData.date || !newTransactionData.accountDetails || !newTransactionData.amount) {
+      alert('Please fill all required fields');
+      return;
+    }
+    
+    await addBudgetTransaction(project.id, {
+      ...newTransactionData,
+      projectId: project.id
+    });
+    
+    setIsTransactionModalOpen(false);
+    setNewTransactionData({ type: budgetSubTab === 'credited' ? 'CREDIT' : 'DEBIT', date: '', accountDetails: '', amount: 0 });
+  };
+
   const renderBudgetTab = () => {
     if (role !== 'HEAD') return <div className="p-10 text-center text-neutral-400">Restricted Access.</div>;
-    const remaining = project.budget - project.currentSpend;
-    const health = remaining < 0 ? 'red' : remaining < (project.budget * 0.15) ? 'yellow' : 'green';
+    
+    // Filter transactions by type
+    const creditedTransactions = budgetTransactions.filter(t => t.type === 'CREDIT').sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const debitedTransactions = budgetTransactions.filter(t => t.type === 'DEBIT').sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
+    // Calculate totals
+    const totalCredited = creditedTransactions.reduce((sum, t) => sum + t.amount, 0);
+    const totalDebited = debitedTransactions.reduce((sum, t) => sum + t.amount, 0);
+    const balance = totalCredited - totalDebited;
+
+    // Calculate running totals
+    let creditRunningTotal = 0;
+    const creditedWithTotal = creditedTransactions.map(t => {
+      creditRunningTotal += t.amount;
+      return { ...t, runningTotal: creditRunningTotal };
+    });
+
+    let debitRunningTotal = 0;
+    const debitedWithTotal = debitedTransactions.map(t => {
+      debitRunningTotal += t.amount;
+      return { ...t, runningTotal: debitRunningTotal };
+    });
 
     return (
-        <div className="space-y-8">
-            <div className="flex justify-between items-center">
-                <h3 className="font-serif font-bold text-xl">Financial Overview</h3>
-                {!editBudgetMode ? 
-                    <Button variant="outline" onClick={() => setEditBudgetMode(true)} className="text-xs py-2">Edit Budget</Button> :
-                    <div className="flex gap-2">
-                         <Button variant="ghost" onClick={() => setEditBudgetMode(false)} className="text-xs py-2">Cancel</Button>
-                         <Button variant="primary" onClick={handleSaveBudget} className="text-xs py-2">Save Changes</Button>
+        <div className="space-y-6">
+            {/* Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card className="bg-green-50 border-green-200">
+                    <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center">
+                            <TrendingUp size={24} className="text-white"/>
+                        </div>
+                        <div>
+                            <p className="text-green-600 text-xs font-bold uppercase tracking-wider">Total Credited</p>
+                            <p className="text-2xl font-bold text-green-700">₹{totalCredited.toLocaleString()}</p>
+                        </div>
                     </div>
-                }
+                </Card>
+                <Card className="bg-red-50 border-red-200">
+                    <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 bg-red-500 rounded-full flex items-center justify-center">
+                            <TrendingDown size={24} className="text-white"/>
+                        </div>
+                        <div>
+                            <p className="text-red-600 text-xs font-bold uppercase tracking-wider">Total Debited</p>
+                            <p className="text-2xl font-bold text-red-700">₹{totalDebited.toLocaleString()}</p>
+                        </div>
+                    </div>
+                </Card>
+                <Card className={`${balance >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-orange-50 border-orange-200'}`}>
+                    <div className="flex items-center gap-3">
+                        <div className={`w-12 h-12 ${balance >= 0 ? 'bg-blue-500' : 'bg-orange-500'} rounded-full flex items-center justify-center`}>
+                            <Briefcase size={24} className="text-white"/>
+                        </div>
+                        <div>
+                            <p className={`${balance >= 0 ? 'text-blue-600' : 'text-orange-600'} text-xs font-bold uppercase tracking-wider`}>Balance</p>
+                            <p className={`text-2xl font-bold ${balance >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>₹{balance.toLocaleString()}</p>
+                        </div>
+                    </div>
+                </Card>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="bg-neutral-900 text-white border-none">
-                    <p className="text-neutral-400 text-xs font-bold uppercase tracking-widest mb-2">Total Estimated</p>
-                    {editBudgetMode ? 
-                        <input className="bg-neutral-800 text-2xl font-bold w-full p-2 rounded" type="number" value={tempBudget.cost} onChange={e => setTempBudget({...tempBudget, cost: Number(e.target.value)})}/> :
-                        <p className="text-3xl font-serif">₹{project.estimatedCost.toLocaleString()}</p>
-                    }
-                </Card>
-                <Card className="bg-accent text-primary border-none">
-                    <p className="text-primary/60 text-xs font-bold uppercase tracking-widest mb-2">Approved Budget</p>
-                    {editBudgetMode ? 
-                        <input className="bg-yellow-300/50 text-2xl font-bold w-full p-2 rounded text-black" type="number" value={tempBudget.budget} onChange={e => setTempBudget({...tempBudget, budget: Number(e.target.value)})}/> :
-                        <p className="text-3xl font-serif">₹{project.budget.toLocaleString()}</p>
-                    }
-                </Card>
-                <Card className={`${health === 'red' ? 'bg-red-50 border-red-200' : health === 'yellow' ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200'}`}>
-                     <p className={`${health === 'red' ? 'text-red-800' : health === 'yellow' ? 'text-yellow-800' : 'text-green-800'} text-xs font-bold uppercase tracking-widest mb-2`}>Remaining</p>
-                     <p className={`text-3xl font-serif ${health === 'red' ? 'text-red-600' : health === 'yellow' ? 'text-yellow-700' : 'text-green-700'}`}>₹{remaining.toLocaleString()}</p>
-                </Card>
-            </div>
-            
-            <div className="pt-6 border-t border-neutral-100">
-                <h4 className="font-bold text-lg mb-4">Spending Breakdown</h4>
-                {/* Simple Bar Chart Visualization */}
-                <div className="h-8 w-full bg-neutral-100 rounded-full overflow-hidden flex">
-                    <div className="h-full bg-primary" style={{ width: `${Math.min((project.currentSpend / project.budget) * 100, 100)}%` }}></div>
+            {/* Sub-tabs for Credited/Debited */}
+            <div className="flex items-center justify-between">
+                <div className="flex bg-neutral-100 p-1 rounded-lg">
+                    <button 
+                        onClick={() => setBudgetSubTab('credited')}
+                        className={`px-6 py-2.5 rounded-md text-sm font-bold transition-all flex items-center gap-2 ${
+                            budgetSubTab === 'credited' 
+                                ? 'bg-green-500 text-white shadow-md' 
+                                : 'text-neutral-500 hover:text-neutral-700'
+                        }`}
+                    >
+                        <TrendingUp size={16}/> Credited
+                    </button>
+                    <button 
+                        onClick={() => setBudgetSubTab('debited')}
+                        className={`px-6 py-2.5 rounded-md text-sm font-bold transition-all flex items-center gap-2 ${
+                            budgetSubTab === 'debited' 
+                                ? 'bg-red-500 text-white shadow-md' 
+                                : 'text-neutral-500 hover:text-neutral-700'
+                        }`}
+                    >
+                        <TrendingDown size={16}/> Debited
+                    </button>
                 </div>
-                <div className="flex justify-between text-xs font-bold text-neutral-400 mt-2 uppercase tracking-wider">
-                    <span>₹0</span>
-                    <span>Current: ₹{project.currentSpend.toLocaleString()}</span>
-                    <span>Budget: ₹{project.budget.toLocaleString()}</span>
-                </div>
+                <Button 
+                    variant="primary" 
+                    onClick={() => {
+                        setNewTransactionData({ type: budgetSubTab === 'credited' ? 'CREDIT' : 'DEBIT', date: '', accountDetails: '', amount: 0 });
+                        setIsTransactionModalOpen(true);
+                    }}
+                    className="flex items-center gap-2"
+                >
+                    <Plus size={16}/> Add {budgetSubTab === 'credited' ? 'Credit' : 'Debit'}
+                </Button>
             </div>
+
+            {/* Transactions Table */}
+            <Card className="p-0 overflow-hidden">
+                {budgetSubTab === 'credited' ? (
+                    <table className="w-full">
+                        <thead className={`bg-green-600 text-white`}>
+                            <tr>
+                                <th className="p-4 text-left font-bold text-sm">S.NO</th>
+                                <th className="p-4 text-left font-bold text-sm">DATE</th>
+                                <th className="p-4 text-left font-bold text-sm">ACCOUNT DETAILS</th>
+                                <th className="p-4 text-right font-bold text-sm">CREDITED AMT</th>
+                                <th className="p-4 text-right font-bold text-sm">TOTAL</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-neutral-100">
+                            {creditedWithTotal.length === 0 ? (
+                                <tr>
+                                    <td colSpan={5} className="p-8 text-center text-neutral-400">No credit transactions yet</td>
+                                </tr>
+                            ) : (
+                                creditedWithTotal.map((t, idx) => (
+                                    <tr key={t.id} className="hover:bg-green-50/50 transition-colors">
+                                        <td className="p-4 text-neutral-600 font-medium">{idx + 1}</td>
+                                        <td className="p-4 text-neutral-600">{t.date ? format(new Date(t.date), 'd/M/yyyy') : '-'}</td>
+                                        <td className="p-4 font-medium text-primary">{t.accountDetails}</td>
+                                        <td className="p-4 text-right font-mono font-bold text-green-600">₹{t.amount.toLocaleString()}</td>
+                                        <td className="p-4 text-right font-mono font-bold text-neutral-800 bg-neutral-50">₹{t.runningTotal.toLocaleString()}</td>
+                                    </tr>
+                                ))
+                            )}
+                            {creditedWithTotal.length > 0 && (
+                                <tr className="bg-green-100 font-bold">
+                                    <td colSpan={3} className="p-4 text-right text-green-800 uppercase text-sm">Grand Total</td>
+                                    <td className="p-4 text-right font-mono text-green-700 text-lg">₹{totalCredited.toLocaleString()}</td>
+                                    <td className="p-4 bg-green-200"></td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                ) : (
+                    <table className="w-full">
+                        <thead className={`bg-red-600 text-white`}>
+                            <tr>
+                                <th className="p-4 text-left font-bold text-sm">S.NO</th>
+                                <th className="p-4 text-left font-bold text-sm">DATE</th>
+                                <th className="p-4 text-left font-bold text-sm">DEBITED DETAILS</th>
+                                <th className="p-4 text-right font-bold text-sm">DEBITED AMT</th>
+                                <th className="p-4 text-right font-bold text-sm">TOTAL</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-neutral-100">
+                            {debitedWithTotal.length === 0 ? (
+                                <tr>
+                                    <td colSpan={5} className="p-8 text-center text-neutral-400">No debit transactions yet</td>
+                                </tr>
+                            ) : (
+                                debitedWithTotal.map((t, idx) => (
+                                    <tr key={t.id} className="hover:bg-red-50/50 transition-colors">
+                                        <td className="p-4 text-neutral-600 font-medium">{idx + 1}</td>
+                                        <td className="p-4 text-neutral-600">{t.date ? format(new Date(t.date), 'd/M/yyyy') : '-'}</td>
+                                        <td className="p-4 font-medium text-primary">{t.accountDetails}</td>
+                                        <td className="p-4 text-right font-mono font-bold text-red-600">₹{t.amount.toLocaleString()}</td>
+                                        <td className="p-4 text-right font-mono font-bold text-neutral-800 bg-neutral-50">₹{t.runningTotal.toLocaleString()}</td>
+                                    </tr>
+                                ))
+                            )}
+                            {debitedWithTotal.length > 0 && (
+                                <tr className="bg-red-100 font-bold">
+                                    <td colSpan={3} className="p-4 text-right text-red-800 uppercase text-sm">Grand Total</td>
+                                    <td className="p-4 text-right font-mono text-red-700 text-lg">₹{totalDebited.toLocaleString()}</td>
+                                    <td className="p-4 bg-red-200"></td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                )}
+            </Card>
+
+            {/* Add Transaction Modal */}
+            {isTransactionModalOpen && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+                    <Card className="w-full max-w-md">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="font-bold text-lg flex items-center gap-2">
+                                {newTransactionData.type === 'CREDIT' ? (
+                                    <><TrendingUp size={20} className="text-green-500"/> Add Credit Entry</>
+                                ) : (
+                                    <><TrendingDown size={20} className="text-red-500"/> Add Debit Entry</>
+                                )}
+                            </h3>
+                            <button onClick={() => setIsTransactionModalOpen(false)} className="text-neutral-400 hover:text-neutral-600">
+                                <X size={20}/>
+                            </button>
+                        </div>
+                        <div className="space-y-4">
+                            <Input 
+                                label="Date *" 
+                                type="date"
+                                value={newTransactionData.date || ''} 
+                                onChange={(e: any) => setNewTransactionData({...newTransactionData, date: e.target.value})} 
+                            />
+                            <Input 
+                                label="Account Details *" 
+                                placeholder={newTransactionData.type === 'CREDIT' ? "e.g., CHALLA ASHOK REDDY, CHEQUE" : "e.g., KHYATHI PLYWOOD, DINDAYAL(CARPENTER)"}
+                                value={newTransactionData.accountDetails || ''} 
+                                onChange={(e: any) => setNewTransactionData({...newTransactionData, accountDetails: e.target.value})} 
+                            />
+                            <Input 
+                                label={`${newTransactionData.type === 'CREDIT' ? 'Credited' : 'Debited'} Amount (₹) *`}
+                                type="number"
+                                placeholder="0"
+                                value={newTransactionData.amount || ''} 
+                                onChange={(e: any) => setNewTransactionData({...newTransactionData, amount: Number(e.target.value)})} 
+                            />
+                            <div className="flex justify-end gap-2 pt-4">
+                                <Button variant="ghost" onClick={() => setIsTransactionModalOpen(false)}>Cancel</Button>
+                                <Button 
+                                    variant="primary" 
+                                    onClick={handleAddTransaction}
+                                    className={newTransactionData.type === 'CREDIT' ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'}
+                                >
+                                    Add {newTransactionData.type === 'CREDIT' ? 'Credit' : 'Debit'}
+                                </Button>
+                            </div>
+                        </div>
+                    </Card>
+                </div>
+            )}
         </div>
     );
   };

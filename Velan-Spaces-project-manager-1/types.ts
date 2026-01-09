@@ -96,6 +96,16 @@ export interface Settlement {
   createdAt: any;
 }
 
+export interface BudgetTransaction {
+  id: string;
+  projectId: string;
+  type: 'CREDIT' | 'DEBIT';
+  date: string; // ISO date
+  accountDetails: string; // Description/Name
+  amount: number;
+  createdAt: any;
+}
+
 export interface Comment {
   id: string;
   author: string;
