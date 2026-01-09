@@ -5,7 +5,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebas
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 // @ts-ignore
 import { 
-  getFirestore, collection, doc, getDoc, setDoc, addDoc, updateDoc, 
+  getFirestore, collection, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
   onSnapshot, orderBy, query, serverTimestamp, arrayUnion, where 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 // @ts-ignore
@@ -276,8 +276,12 @@ export const addBudgetTransaction = async (projectId: string, transaction: Parti
 
 export const deleteBudgetTransaction = async (projectId: string, transactionId: string) => {
     const docRef = doc(db, COL_PROJECTS, projectId, 'budgetTransactions', transactionId);
-    // Note: For proper deletion, you might need to import deleteDoc from firebase
-    // For now, we'll use a workaround or add deleteDoc import
+    await deleteDoc(docRef);
+};
+
+export const updateBudgetTransaction = async (projectId: string, transactionId: string, data: Partial<BudgetTransaction>) => {
+    const docRef = doc(db, COL_PROJECTS, projectId, 'budgetTransactions', transactionId);
+    await updateDoc(docRef, data);
 };
 
 export { db, auth, storage };

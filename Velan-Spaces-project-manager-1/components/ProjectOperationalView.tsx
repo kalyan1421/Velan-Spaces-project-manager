@@ -6,7 +6,7 @@ import {
     subscribeToSettlements, addSettlement,
     subscribeToDesigns, addDesign, updateDesignStatus, updateProjectFinancials,
     uploadProjectFile, subscribeToRooms, addRoom, updateRoom,
-    subscribeToBudgetTransactions, addBudgetTransaction
+    subscribeToBudgetTransactions, addBudgetTransaction, deleteBudgetTransaction, updateBudgetTransaction
 } from '../services/firebase';
 import { Card, Button, Input, Badge } from './Layouts';
 import { Send, Image, FileText, DollarSign, MessageSquare, Clock, Users, Plus, Trash2, CheckCircle, AlertCircle, Briefcase, Download, ArrowUpRight, Paperclip, X, Video, Home, ChevronDown, ChevronRight, Calendar, Target, Edit2, TrendingUp, TrendingDown } from 'lucide-react';
@@ -69,6 +69,7 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
   const [budgetTransactions, setBudgetTransactions] = useState<BudgetTransaction[]>([]);
   const [budgetSubTab, setBudgetSubTab] = useState<'credited' | 'debited'>('credited');
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
+  const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
   const [newTransactionData, setNewTransactionData] = useState<Partial<BudgetTransaction>>({
     type: 'CREDIT',
     date: '',
@@ -740,17 +741,44 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
 
   const handleAddTransaction = async () => {
     if (!newTransactionData.date || !newTransactionData.accountDetails || !newTransactionData.amount) {
-      alert('Please fill all required fields');
       return;
     }
     
-    await addBudgetTransaction(project.id, {
-      ...newTransactionData,
-      projectId: project.id
-    });
+    if (editingTransactionId) {
+      // Update existing transaction
+      await updateBudgetTransaction(project.id, editingTransactionId, {
+        date: newTransactionData.date,
+        accountDetails: newTransactionData.accountDetails,
+        amount: newTransactionData.amount
+      });
+    } else {
+      // Add new transaction
+      await addBudgetTransaction(project.id, {
+        ...newTransactionData,
+        projectId: project.id
+      });
+    }
     
     setIsTransactionModalOpen(false);
+    setEditingTransactionId(null);
     setNewTransactionData({ type: budgetSubTab === 'credited' ? 'CREDIT' : 'DEBIT', date: '', accountDetails: '', amount: 0 });
+  };
+
+  const handleEditTransaction = (transaction: BudgetTransaction) => {
+    setEditingTransactionId(transaction.id);
+    setNewTransactionData({
+      type: transaction.type,
+      date: transaction.date,
+      accountDetails: transaction.accountDetails,
+      amount: transaction.amount
+    });
+    setIsTransactionModalOpen(true);
+  };
+
+  const handleDeleteTransaction = async (transactionId: string) => {
+    if (confirm('Are you sure you want to delete this transaction?')) {
+      await deleteBudgetTransaction(project.id, transactionId);
+    }
   };
 
   const renderBudgetTab = () => {
@@ -786,11 +814,11 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
                     <div className="flex items-center gap-3">
                         <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center">
                             <TrendingUp size={24} className="text-white"/>
-                        </div>
+                    </div>
                         <div>
                             <p className="text-green-600 text-xs font-bold uppercase tracking-wider">Total Credited</p>
                             <p className="text-2xl font-bold text-green-700">₹{totalCredited.toLocaleString()}</p>
-                        </div>
+            </div>
                     </div>
                 </Card>
                 <Card className="bg-red-50 border-red-200">
@@ -816,7 +844,7 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
                     </div>
                 </Card>
             </div>
-
+            
             {/* Sub-tabs for Credited/Debited */}
             <div className="flex items-center justify-between">
                 <div className="flex bg-neutral-100 p-1 rounded-lg">
@@ -851,7 +879,7 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
                 >
                     <Plus size={16}/> Add {budgetSubTab === 'credited' ? 'Credit' : 'Debit'}
                 </Button>
-            </div>
+                </div>
 
             {/* Transactions Table */}
             <Card className="p-0 overflow-hidden">
@@ -864,12 +892,13 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
                                 <th className="p-4 text-left font-bold text-sm">ACCOUNT DETAILS</th>
                                 <th className="p-4 text-right font-bold text-sm">CREDITED AMT</th>
                                 <th className="p-4 text-right font-bold text-sm">TOTAL</th>
+                                <th className="p-4 text-center font-bold text-sm">ACTIONS</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-neutral-100">
                             {creditedWithTotal.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="p-8 text-center text-neutral-400">No credit transactions yet</td>
+                                    <td colSpan={6} className="p-8 text-center text-neutral-400">No credit transactions yet</td>
                                 </tr>
                             ) : (
                                 creditedWithTotal.map((t, idx) => (
@@ -879,6 +908,24 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
                                         <td className="p-4 font-medium text-primary">{t.accountDetails}</td>
                                         <td className="p-4 text-right font-mono font-bold text-green-600">₹{t.amount.toLocaleString()}</td>
                                         <td className="p-4 text-right font-mono font-bold text-neutral-800 bg-neutral-50">₹{t.runningTotal.toLocaleString()}</td>
+                                        <td className="p-4 text-center">
+                                            <div className="flex items-center justify-center gap-2">
+                                                <button 
+                                                    onClick={() => handleEditTransaction(t)}
+                                                    className="p-1.5 text-blue-500 hover:bg-blue-100 rounded-lg transition-colors"
+                                                    title="Edit"
+                                                >
+                                                    <Edit2 size={16}/>
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleDeleteTransaction(t.id)}
+                                                    className="p-1.5 text-red-500 hover:bg-red-100 rounded-lg transition-colors"
+                                                    title="Delete"
+                                                >
+                                                    <Trash2 size={16}/>
+                                                </button>
+            </div>
+                                        </td>
                                     </tr>
                                 ))
                             )}
@@ -886,6 +933,7 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
                                 <tr className="bg-green-100 font-bold">
                                     <td colSpan={3} className="p-4 text-right text-green-800 uppercase text-sm">Grand Total</td>
                                     <td className="p-4 text-right font-mono text-green-700 text-lg">₹{totalCredited.toLocaleString()}</td>
+                                    <td className="p-4 bg-green-200"></td>
                                     <td className="p-4 bg-green-200"></td>
                                 </tr>
                             )}
@@ -900,12 +948,13 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
                                 <th className="p-4 text-left font-bold text-sm">DEBITED DETAILS</th>
                                 <th className="p-4 text-right font-bold text-sm">DEBITED AMT</th>
                                 <th className="p-4 text-right font-bold text-sm">TOTAL</th>
+                                <th className="p-4 text-center font-bold text-sm">ACTIONS</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-neutral-100">
                             {debitedWithTotal.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="p-8 text-center text-neutral-400">No debit transactions yet</td>
+                                    <td colSpan={6} className="p-8 text-center text-neutral-400">No debit transactions yet</td>
                                 </tr>
                             ) : (
                                 debitedWithTotal.map((t, idx) => (
@@ -915,6 +964,24 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
                                         <td className="p-4 font-medium text-primary">{t.accountDetails}</td>
                                         <td className="p-4 text-right font-mono font-bold text-red-600">₹{t.amount.toLocaleString()}</td>
                                         <td className="p-4 text-right font-mono font-bold text-neutral-800 bg-neutral-50">₹{t.runningTotal.toLocaleString()}</td>
+                                        <td className="p-4 text-center">
+                                            <div className="flex items-center justify-center gap-2">
+                                                <button 
+                                                    onClick={() => handleEditTransaction(t)}
+                                                    className="p-1.5 text-blue-500 hover:bg-blue-100 rounded-lg transition-colors"
+                                                    title="Edit"
+                                                >
+                                                    <Edit2 size={16}/>
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleDeleteTransaction(t.id)}
+                                                    className="p-1.5 text-red-500 hover:bg-red-100 rounded-lg transition-colors"
+                                                    title="Delete"
+                                                >
+                                                    <Trash2 size={16}/>
+                                                </button>
+                                            </div>
+                                        </td>
                                     </tr>
                                 ))
                             )}
@@ -923,6 +990,7 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
                                     <td colSpan={3} className="p-4 text-right text-red-800 uppercase text-sm">Grand Total</td>
                                     <td className="p-4 text-right font-mono text-red-700 text-lg">₹{totalDebited.toLocaleString()}</td>
                                     <td className="p-4 bg-red-200"></td>
+                                    <td className="p-4 bg-red-200"></td>
                                 </tr>
                             )}
                         </tbody>
@@ -930,19 +998,19 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
                 )}
             </Card>
 
-            {/* Add Transaction Modal */}
+            {/* Add/Edit Transaction Modal */}
             {isTransactionModalOpen && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
                     <Card className="w-full max-w-md">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="font-bold text-lg flex items-center gap-2">
                                 {newTransactionData.type === 'CREDIT' ? (
-                                    <><TrendingUp size={20} className="text-green-500"/> Add Credit Entry</>
+                                    <><TrendingUp size={20} className="text-green-500"/> {editingTransactionId ? 'Edit' : 'Add'} Credit Entry</>
                                 ) : (
-                                    <><TrendingDown size={20} className="text-red-500"/> Add Debit Entry</>
+                                    <><TrendingDown size={20} className="text-red-500"/> {editingTransactionId ? 'Edit' : 'Add'} Debit Entry</>
                                 )}
                             </h3>
-                            <button onClick={() => setIsTransactionModalOpen(false)} className="text-neutral-400 hover:text-neutral-600">
+                            <button onClick={() => { setIsTransactionModalOpen(false); setEditingTransactionId(null); }} className="text-neutral-400 hover:text-neutral-600">
                                 <X size={20}/>
                             </button>
                         </div>
@@ -955,7 +1023,7 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
                             />
                             <Input 
                                 label="Account Details *" 
-                                placeholder={newTransactionData.type === 'CREDIT' ? "e.g., CHALLA ASHOK REDDY, CHEQUE" : "e.g., KHYATHI PLYWOOD, DINDAYAL(CARPENTER)"}
+                                placeholder="e.g., Kalyan Kumar"
                                 value={newTransactionData.accountDetails || ''} 
                                 onChange={(e: any) => setNewTransactionData({...newTransactionData, accountDetails: e.target.value})} 
                             />
@@ -967,13 +1035,13 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
                                 onChange={(e: any) => setNewTransactionData({...newTransactionData, amount: Number(e.target.value)})} 
                             />
                             <div className="flex justify-end gap-2 pt-4">
-                                <Button variant="ghost" onClick={() => setIsTransactionModalOpen(false)}>Cancel</Button>
+                                <Button variant="ghost" onClick={() => { setIsTransactionModalOpen(false); setEditingTransactionId(null); }}>Cancel</Button>
                                 <Button 
                                     variant="primary" 
                                     onClick={handleAddTransaction}
                                     className={newTransactionData.type === 'CREDIT' ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'}
                                 >
-                                    Add {newTransactionData.type === 'CREDIT' ? 'Credit' : 'Debit'}
+                                    {editingTransactionId ? 'Save Changes' : `Add ${newTransactionData.type === 'CREDIT' ? 'Credit' : 'Debit'}`}
                                 </Button>
                             </div>
                         </div>
