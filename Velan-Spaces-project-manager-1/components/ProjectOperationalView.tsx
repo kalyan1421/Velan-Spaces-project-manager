@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Project, ProjectUpdate, UserRole, TimelinePhase, Worker, Settlement, DesignDocument, Manager, Room } from '../types';
+import { Project, ProjectUpdate, UserRole, TimelinePhase, TimelineTask, Worker, Settlement, DesignDocument, Manager, Room } from '../types';
 import { 
     subscribeToUpdates, addUpdate, updateTimeline, 
     assignWorkerToProject, subscribeToGlobalWorkers, addGlobalWorker,
@@ -8,8 +8,8 @@ import {
     uploadProjectFile, subscribeToRooms, addRoom, updateRoom
 } from '../services/firebase';
 import { Card, Button, Input, Badge } from './Layouts';
-import { Send, Image, FileText, DollarSign, MessageSquare, Clock, Users, Plus, Trash2, CheckCircle, AlertCircle, Briefcase, Download, ArrowUpRight, Paperclip, X, Video, Home } from 'lucide-react';
-import { format, isSameDay } from 'date-fns';
+import { Send, Image, FileText, DollarSign, MessageSquare, Clock, Users, Plus, Trash2, CheckCircle, AlertCircle, Briefcase, Download, ArrowUpRight, Paperclip, X, Video, Home, ChevronDown, ChevronRight, Calendar, Target, Edit2 } from 'lucide-react';
+import { format, isSameDay, differenceInDays, isPast, isToday } from 'date-fns';
 
 interface Props {
   project: Project;
@@ -64,6 +64,29 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
   // --- BUDGET TAB STATE ---
   const [editBudgetMode, setEditBudgetMode] = useState(false);
   const [tempBudget, setTempBudget] = useState({ cost: project.estimatedCost, budget: project.budget });
+
+  // --- TIMELINE TAB STATE ---
+  const [expandedPhases, setExpandedPhases] = useState<string[]>([]);
+  const [isPhaseModalOpen, setIsPhaseModalOpen] = useState(false);
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [editingPhaseIndex, setEditingPhaseIndex] = useState<number | null>(null);
+  const [selectedPhaseForTask, setSelectedPhaseForTask] = useState<number | null>(null);
+  const [newPhaseData, setNewPhaseData] = useState<Partial<TimelinePhase>>({ 
+    name: '', 
+    description: '', 
+    startDate: '', 
+    targetDate: '', 
+    status: 'PENDING',
+    tasks: [] 
+  });
+  const [newTaskData, setNewTaskData] = useState<Partial<TimelineTask>>({
+    title: '',
+    description: '',
+    startDate: '',
+    targetDate: '',
+    status: 'PENDING',
+    assignedWorkerIds: []
+  });
 
   useEffect(() => {
     if (role === 'WORKER' && !['updates', 'designs', 'timeline'].includes(activeTab)) {
@@ -695,30 +718,488 @@ export const ProjectOperationalView: React.FC<Props> = ({ project, role, current
     );
   };
 
+  const togglePhaseExpand = (phaseId: string) => {
+    setExpandedPhases(prev => 
+      prev.includes(phaseId) 
+        ? prev.filter(id => id !== phaseId) 
+        : [...prev, phaseId]
+    );
+  };
+
+  const getPhaseStatusColor = (status: string) => {
+    switch(status) {
+      case 'COMPLETED': return { bg: 'bg-green-500', text: 'text-green-600', light: 'bg-green-50 border-green-200' };
+      case 'IN_PROGRESS': return { bg: 'bg-amber-500', text: 'text-amber-600', light: 'bg-amber-50 border-amber-200' };
+      default: return { bg: 'bg-neutral-300', text: 'text-neutral-500', light: 'bg-neutral-50 border-neutral-200' };
+    }
+  };
+
+  const getTaskProgress = (tasks: TimelineTask[]) => {
+    if (!tasks || tasks.length === 0) return 0;
+    const completed = tasks.filter(t => t.status === 'COMPLETED').length;
+    return Math.round((completed / tasks.length) * 100);
+  };
+
+  const getDaysRemaining = (targetDate: string) => {
+    if (!targetDate) return null;
+    const target = new Date(targetDate);
+    const today = new Date();
+    const days = differenceInDays(target, today);
+    if (isToday(target)) return 'Due today';
+    if (days < 0) return `${Math.abs(days)} days overdue`;
+    return `${days} days left`;
+  };
+
+  const handleAddPhase = () => {
+    if (!newPhaseData.name || !newPhaseData.startDate || !newPhaseData.targetDate) {
+      alert('Please fill Phase Name, Start Date, and Goal Date');
+      return;
+    }
+    const newPhase: TimelinePhase = {
+      id: Date.now().toString(),
+      name: newPhaseData.name || '',
+      description: newPhaseData.description || '',
+      startDate: newPhaseData.startDate || '',
+      targetDate: newPhaseData.targetDate || '',
+      status: 'PENDING',
+      tasks: []
+    };
+    
+    if (editingPhaseIndex !== null) {
+      const updated = [...phases];
+      updated[editingPhaseIndex] = { ...updated[editingPhaseIndex], ...newPhaseData };
+      setPhases(updated);
+    } else {
+      setPhases([...phases, newPhase]);
+    }
+    
+    setIsPhaseModalOpen(false);
+    setEditingPhaseIndex(null);
+    setNewPhaseData({ name: '', description: '', startDate: '', targetDate: '', status: 'PENDING', tasks: [] });
+  };
+
+  const handleAddTask = () => {
+    if (selectedPhaseForTask === null || !newTaskData.title || !newTaskData.targetDate) {
+      alert('Please fill Task Title and Target Date');
+      return;
+    }
+    
+    const newTask: TimelineTask = {
+      id: Date.now().toString(),
+      title: newTaskData.title || '',
+      description: newTaskData.description || '',
+      startDate: newTaskData.startDate || '',
+      targetDate: newTaskData.targetDate || '',
+      status: 'PENDING',
+      assignedWorkerIds: newTaskData.assignedWorkerIds || []
+    };
+    
+    const updated = [...phases];
+    if (!updated[selectedPhaseForTask].tasks) {
+      updated[selectedPhaseForTask].tasks = [];
+    }
+    updated[selectedPhaseForTask].tasks.push(newTask);
+    setPhases(updated);
+    
+    setIsTaskModalOpen(false);
+    setSelectedPhaseForTask(null);
+    setNewTaskData({ title: '', description: '', startDate: '', targetDate: '', status: 'PENDING', assignedWorkerIds: [] });
+  };
+
+  const updateTaskStatus = (phaseIdx: number, taskIdx: number, status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED') => {
+    const updated = [...phases];
+    updated[phaseIdx].tasks[taskIdx].status = status;
+    setPhases(updated);
+  };
+
+  const deleteTask = (phaseIdx: number, taskIdx: number) => {
+    const updated = [...phases];
+    updated[phaseIdx].tasks.splice(taskIdx, 1);
+    setPhases(updated);
+  };
+
   const renderTimelineTab = () => (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-4xl mx-auto">
         <div className="flex justify-between items-center mb-8">
-            <h3 className="font-serif font-bold text-xl">Timeline & Phases</h3>
-            {role !== 'WORKER' && <Button onClick={() => updateTimeline(project.id, phases).then(() => alert('Timeline Saved'))} variant="accent">Save Timeline</Button>}
+            <div>
+                <h3 className="font-serif font-bold text-2xl">Project Timeline</h3>
+                <p className="text-neutral-500 text-sm mt-1">Track phases and sub-works progress</p>
         </div>
-        <div className="space-y-4">
-            {phases.map((phase, idx) => (
-                <div key={idx} className="flex gap-4 items-center bg-white p-4 rounded-xl border border-neutral-100 shadow-sm">
-                    <div className="flex-shrink-0 w-8 h-8 bg-neutral-900 text-white rounded-full flex items-center justify-center font-bold text-sm">{idx + 1}</div>
-                    <div className="flex-1 grid grid-cols-3 gap-4">
-                        <input className="border-b border-neutral-200 focus:border-accent outline-none py-2 font-medium" placeholder="Phase Name" value={phase.name} onChange={(e) => { const n = [...phases]; n[idx].name = e.target.value; setPhases(n); }} disabled={role === 'WORKER'} />
-                        <input type="date" className="border-b border-neutral-200 focus:border-accent outline-none py-2 text-sm text-neutral-500" value={phase.targetDate} onChange={(e) => { const n = [...phases]; n[idx].targetDate = e.target.value; setPhases(n); }} disabled={role === 'WORKER'} />
-                        <select className="border-b border-neutral-200 focus:border-accent outline-none py-2 text-sm bg-transparent" value={phase.status} onChange={(e) => { const n = [...phases]; n[idx].status = e.target.value as any; setPhases(n); }} disabled={role === 'WORKER'}>
-                            <option value="PENDING">Pending</option><option value="IN_PROGRESS">In Progress</option><option value="COMPLETED">Completed</option>
-                        </select>
+            <div className="flex gap-2">
+                {role !== 'WORKER' && (
+                    <>
+                        <Button onClick={() => setIsPhaseModalOpen(true)} variant="primary" className="flex items-center gap-2">
+                            <Plus size={16}/> Add Phase
+                        </Button>
+                        <Button onClick={() => updateTimeline(project.id, phases).then(() => alert('Timeline Saved'))} variant="accent">
+                            Save All
+                        </Button>
+                    </>
+                )}
                     </div>
-                    {role !== 'WORKER' && <button onClick={() => setPhases(phases.filter((_, i) => i !== idx))} className="text-neutral-300 hover:text-red-500"><Trash2 size={18}/></button>}
                 </div>
-            ))}
-            {role !== 'WORKER' && <Button variant="secondary" onClick={() => setPhases([...phases, { id: Date.now().toString(), name: '', targetDate: '', status: 'PENDING' }])} className="w-full border-dashed border-2 border-neutral-200 bg-transparent hover:border-accent hover:text-primary">
-                <Plus size={18} className="inline mr-2"/> Add Phase
-            </Button>}
+
+        {/* Timeline Progress Overview */}
+        {phases.length > 0 && (
+            <Card className="mb-8 bg-gradient-to-r from-neutral-900 to-neutral-800 text-white border-none">
+                <div className="flex justify-between items-center mb-4">
+                    <span className="text-neutral-400 text-xs font-bold uppercase tracking-wider">Overall Progress</span>
+                    <span className="text-2xl font-bold">{Math.round(phases.filter(p => p.status === 'COMPLETED').length / phases.length * 100)}%</span>
+                </div>
+                <div className="flex gap-1 mb-4">
+                    {phases.map((phase, idx) => (
+                        <div 
+                            key={phase.id} 
+                            className={`h-2 flex-1 rounded-full transition-all ${
+                                phase.status === 'COMPLETED' ? 'bg-green-500' : 
+                                phase.status === 'IN_PROGRESS' ? 'bg-amber-500' : 'bg-neutral-600'
+                            }`}
+                            title={phase.name}
+                        />
+                    ))}
         </div>
+                <div className="flex justify-between text-xs text-neutral-400">
+                    <span>{phases.filter(p => p.status === 'COMPLETED').length} of {phases.length} phases completed</span>
+                    <span>{phases.reduce((acc, p) => acc + (p.tasks?.filter(t => t.status === 'COMPLETED').length || 0), 0)} tasks done</span>
+    </div>
+            </Card>
+        )}
+
+        {/* Phases List */}
+        <div className="space-y-4">
+            {phases.length === 0 ? (
+                <Card className="text-center py-12">
+                    <Clock size={48} className="mx-auto text-neutral-300 mb-4"/>
+                    <p className="text-neutral-500">No phases created yet</p>
+                    {role !== 'WORKER' && <p className="text-sm text-neutral-400 mt-2">Click "Add Phase" to start building your timeline</p>}
+                </Card>
+            ) : (
+                phases.map((phase, phaseIdx) => {
+                    const isExpanded = expandedPhases.includes(phase.id);
+                    const statusColors = getPhaseStatusColor(phase.status);
+                    const taskProgress = getTaskProgress(phase.tasks);
+                    const daysInfo = getDaysRemaining(phase.targetDate);
+
+  return (
+                        <div key={phase.id} className="group">
+                            {/* Phase Header - Clickable */}
+                            <div 
+                                className={`bg-white rounded-xl border-2 transition-all cursor-pointer hover:shadow-md ${
+                                    isExpanded ? 'border-accent shadow-md' : 'border-neutral-100'
+                                }`}
+                                onClick={() => togglePhaseExpand(phase.id)}
+                            >
+                                <div className="p-5">
+                                    <div className="flex items-start gap-4">
+                                        {/* Phase Number & Status Indicator */}
+                                        <div className="flex flex-col items-center gap-2">
+                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white ${statusColors.bg}`}>
+                                                {phaseIdx + 1}
+                                            </div>
+                                            <div className={`w-1 h-8 rounded-full ${statusColors.bg} opacity-30`}></div>
+                                        </div>
+                                        
+                                        {/* Phase Info */}
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <h4 className="font-bold text-lg">{phase.name || 'Unnamed Phase'}</h4>
+                                                <Badge color={phase.status === 'COMPLETED' ? 'green' : phase.status === 'IN_PROGRESS' ? 'yellow' : 'neutral'}>
+                                                    {phase.status.replace('_', ' ')}
+                                                </Badge>
+                                            </div>
+                                            
+                                            {phase.description && (
+                                                <p className="text-neutral-500 text-sm mb-3">{phase.description}</p>
+                                            )}
+                                            
+                                            {/* Dates & Progress */}
+                                            <div className="flex flex-wrap items-center gap-4 text-sm">
+                                                <div className="flex items-center gap-2 text-neutral-500">
+                                                    <Calendar size={14}/>
+                                                    <span>{phase.startDate ? format(new Date(phase.startDate), 'MMM d') : 'Not set'}</span>
+                                                    <span>→</span>
+                                                    <span className="font-medium">{phase.targetDate ? format(new Date(phase.targetDate), 'MMM d, yyyy') : 'Not set'}</span>
+                                                </div>
+                                                {daysInfo && (
+                                                    <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                                                        daysInfo.includes('overdue') ? 'bg-red-100 text-red-600' : 
+                                                        daysInfo.includes('today') ? 'bg-amber-100 text-amber-600' : 
+                                                        'bg-blue-100 text-blue-600'
+                                                    }`}>
+                                                        {daysInfo}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            
+                                            {/* Tasks Progress Bar */}
+                                            {phase.tasks && phase.tasks.length > 0 && (
+                                                <div className="mt-3">
+                                                    <div className="flex justify-between text-xs text-neutral-400 mb-1">
+                                                        <span>{phase.tasks.filter(t => t.status === 'COMPLETED').length}/{phase.tasks.length} tasks</span>
+                                                        <span>{taskProgress}%</span>
+                                                    </div>
+                                                    <div className="h-1.5 bg-neutral-100 rounded-full overflow-hidden">
+                                                        <div className="h-full bg-accent transition-all" style={{ width: `${taskProgress}%` }}></div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                        
+                                        {/* Expand/Collapse Icon */}
+                                        <div className="flex items-center gap-2">
+                                            {role !== 'WORKER' && (
+            <button 
+                                                    onClick={(e) => { e.stopPropagation(); setEditingPhaseIndex(phaseIdx); setNewPhaseData(phase); setIsPhaseModalOpen(true); }}
+                                                    className="p-2 hover:bg-neutral-100 rounded-lg text-neutral-400 hover:text-primary transition-colors"
+            >
+                                                    <Edit2 size={16}/>
+            </button>
+                                            )}
+                                            <div className={`p-2 rounded-lg transition-colors ${isExpanded ? 'bg-accent text-primary' : 'bg-neutral-100 text-neutral-400'}`}>
+                                                {isExpanded ? <ChevronDown size={18}/> : <ChevronRight size={18}/>}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                {/* Expanded Tasks Section */}
+                                {isExpanded && (
+                                    <div className="border-t border-neutral-100 bg-neutral-50/50 p-5 rounded-b-xl">
+                                        <div className="flex justify-between items-center mb-4">
+                                            <h5 className="font-bold text-sm text-neutral-600 uppercase tracking-wider">Sub-Works / Tasks</h5>
+                                            {role !== 'WORKER' && (
+                                                <Button 
+                                                    variant="outline" 
+                                                    className="text-xs py-1.5"
+                                                    onClick={(e) => { e.stopPropagation(); setSelectedPhaseForTask(phaseIdx); setIsTaskModalOpen(true); }}
+                                                >
+                                                    <Plus size={14} className="mr-1"/> Add Task
+                                                </Button>
+                                            )}
+                                        </div>
+                                        
+                                        {(!phase.tasks || phase.tasks.length === 0) ? (
+                                            <p className="text-neutral-400 text-sm text-center py-4">No tasks added yet</p>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                {phase.tasks.map((task, taskIdx) => (
+                                                    <div 
+                                                        key={task.id} 
+                                                        className={`flex items-center gap-3 p-3 rounded-lg border bg-white transition-all ${
+                                                            task.status === 'COMPLETED' ? 'border-green-200 bg-green-50/50' :
+                                                            task.status === 'IN_PROGRESS' ? 'border-amber-200 bg-amber-50/50' :
+                                                            'border-neutral-200'
+                                                        }`}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        {/* Task Status Checkbox */}
+                                                        <button 
+                                                            onClick={() => updateTaskStatus(
+                                                                phaseIdx, 
+                                                                taskIdx, 
+                                                                task.status === 'COMPLETED' ? 'PENDING' : 'COMPLETED'
+                                                            )}
+                                                            disabled={role === 'WORKER'}
+                                                            className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                                                                task.status === 'COMPLETED' 
+                                                                    ? 'bg-green-500 border-green-500 text-white' 
+                                                                    : 'border-neutral-300 hover:border-green-500'
+                                                            }`}
+                                                        >
+                                                            {task.status === 'COMPLETED' && <CheckCircle size={14}/>}
+                                                        </button>
+                                                        
+                                                        {/* Task Info */}
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className={`font-medium ${task.status === 'COMPLETED' ? 'line-through text-neutral-400' : ''}`}>
+                                                                {task.title}
+                                                            </p>
+                                                            {task.description && (
+                                                                <p className="text-xs text-neutral-500 truncate">{task.description}</p>
+                                                            )}
+                                                        </div>
+                                                        
+                                                        {/* Task Target Date */}
+                                                        <div className="flex items-center gap-2 text-xs text-neutral-500">
+                                                            <Target size={12}/>
+                                                            {task.targetDate ? format(new Date(task.targetDate), 'MMM d') : '-'}
+                                                        </div>
+                                                        
+                                                        {/* Task Status Select & Delete */}
+                                                        {role !== 'WORKER' && (
+                                                            <div className="flex items-center gap-1">
+                                                                <select 
+                                                                    value={task.status} 
+                                                                    onChange={(e) => updateTaskStatus(phaseIdx, taskIdx, e.target.value as any)}
+                                                                    className="text-xs border rounded-lg px-2 py-1 bg-white"
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                >
+                                                                    <option value="PENDING">Pending</option>
+                                                                    <option value="IN_PROGRESS">In Progress</option>
+                                                                    <option value="COMPLETED">Completed</option>
+                                                                </select>
+                                                                <button 
+                                                                    onClick={() => deleteTask(phaseIdx, taskIdx)}
+                                                                    className="p-1 text-neutral-300 hover:text-red-500"
+                                                                >
+                                                                    <Trash2 size={14}/>
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+        ))}
+      </div>
+                                        )}
+                                        
+                                        {/* Phase Actions */}
+                                        {role !== 'WORKER' && (
+                                            <div className="mt-4 pt-4 border-t border-neutral-200 flex justify-between items-center">
+                                                <select 
+                                                    value={phase.status} 
+                                                    onChange={(e) => { 
+                                                        const updated = [...phases]; 
+                                                        updated[phaseIdx].status = e.target.value as any; 
+                                                        setPhases(updated); 
+                                                    }}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    className="text-sm border rounded-lg px-3 py-2 bg-white"
+                                                >
+                                                    <option value="PENDING">Phase: Pending</option>
+                                                    <option value="IN_PROGRESS">Phase: In Progress</option>
+                                                    <option value="COMPLETED">Phase: Completed</option>
+                                                </select>
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); setPhases(phases.filter((_, i) => i !== phaseIdx)); }}
+                                                    className="text-sm text-red-500 hover:text-red-600 font-medium flex items-center gap-1"
+                                                >
+                                                    <Trash2 size={14}/> Delete Phase
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+      </div>
+    </div>
+  );
+                })
+            )}
+        </div>
+
+        {/* Add/Edit Phase Modal */}
+        {isPhaseModalOpen && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+                <Card className="w-full max-w-md">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="font-bold text-lg">{editingPhaseIndex !== null ? 'Edit Phase' : 'Add New Phase'}</h3>
+                        <button onClick={() => { setIsPhaseModalOpen(false); setEditingPhaseIndex(null); setNewPhaseData({ name: '', description: '', startDate: '', targetDate: '', status: 'PENDING', tasks: [] }); }}>
+                            <X size={20} className="text-neutral-400 hover:text-neutral-600"/>
+                        </button>
+                    </div>
+                    <div className="space-y-4">
+                        <Input 
+                            label="Phase Name *" 
+                            placeholder="e.g., Foundation Work, Structural Work"
+                            value={newPhaseData.name || ''} 
+                            onChange={(e: any) => setNewPhaseData({...newPhaseData, name: e.target.value})} 
+                        />
+                        <div>
+                            <label className="block text-xs font-bold text-neutral-400 uppercase mb-2">Description</label>
+                            <textarea 
+                                className="w-full p-3 border rounded-xl text-sm resize-none"
+                                rows={2}
+                                placeholder="Brief description of this phase..."
+                                value={newPhaseData.description || ''}
+                                onChange={(e) => setNewPhaseData({...newPhaseData, description: e.target.value})}
+                            />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <Input 
+                                label="Start Date *" 
+                                type="date"
+                                value={newPhaseData.startDate || ''} 
+                                onChange={(e: any) => setNewPhaseData({...newPhaseData, startDate: e.target.value})} 
+                            />
+                            <Input 
+                                label="Goal Date *" 
+                                type="date"
+                                value={newPhaseData.targetDate || ''} 
+                                onChange={(e: any) => setNewPhaseData({...newPhaseData, targetDate: e.target.value})} 
+                            />
+                        </div>
+                        {editingPhaseIndex !== null && (
+                            <div>
+                                <label className="block text-xs font-bold text-neutral-400 uppercase mb-2">Status</label>
+                                <select 
+                                    className="w-full p-3 border rounded-xl"
+                                    value={newPhaseData.status}
+                                    onChange={(e) => setNewPhaseData({...newPhaseData, status: e.target.value as any})}
+                                >
+                                    <option value="PENDING">Pending</option>
+                                    <option value="IN_PROGRESS">In Progress</option>
+                                    <option value="COMPLETED">Completed</option>
+                                </select>
+                            </div>
+                        )}
+                        <div className="flex justify-end gap-2 pt-4">
+                            <Button variant="ghost" onClick={() => { setIsPhaseModalOpen(false); setEditingPhaseIndex(null); }}>Cancel</Button>
+                            <Button variant="primary" onClick={handleAddPhase}>
+                                {editingPhaseIndex !== null ? 'Save Changes' : 'Add Phase'}
+                            </Button>
+                        </div>
+                    </div>
+                </Card>
+            </div>
+        )}
+
+        {/* Add Task Modal */}
+        {isTaskModalOpen && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+                <Card className="w-full max-w-md">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="font-bold text-lg">Add Task to Phase</h3>
+                        <button onClick={() => { setIsTaskModalOpen(false); setSelectedPhaseForTask(null); }}>
+                            <X size={20} className="text-neutral-400 hover:text-neutral-600"/>
+                        </button>
+                    </div>
+                    <div className="space-y-4">
+                        <Input 
+                            label="Task Title *" 
+                            placeholder="e.g., Pour concrete, Install rebar"
+                            value={newTaskData.title || ''} 
+                            onChange={(e: any) => setNewTaskData({...newTaskData, title: e.target.value})} 
+                        />
+                        <div>
+                            <label className="block text-xs font-bold text-neutral-400 uppercase mb-2">Description</label>
+                            <textarea 
+                                className="w-full p-3 border rounded-xl text-sm resize-none"
+                                rows={2}
+                                placeholder="Task details..."
+                                value={newTaskData.description || ''}
+                                onChange={(e) => setNewTaskData({...newTaskData, description: e.target.value})}
+                            />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <Input 
+                                label="Start Date" 
+                                type="date"
+                                value={newTaskData.startDate || ''} 
+                                onChange={(e: any) => setNewTaskData({...newTaskData, startDate: e.target.value})} 
+                            />
+                            <Input 
+                                label="Target Date *" 
+                                type="date"
+                                value={newTaskData.targetDate || ''} 
+                                onChange={(e: any) => setNewTaskData({...newTaskData, targetDate: e.target.value})} 
+                            />
+                        </div>
+                        <div className="flex justify-end gap-2 pt-4">
+                            <Button variant="ghost" onClick={() => { setIsTaskModalOpen(false); setSelectedPhaseForTask(null); }}>Cancel</Button>
+                            <Button variant="primary" onClick={handleAddTask}>Add Task</Button>
+                        </div>
+                    </div>
+                </Card>
+            </div>
+        )}
     </div>
   );
 

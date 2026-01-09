@@ -29,12 +29,24 @@ export interface Room {
   // Potentially add categories later if needed here, or keep them at update level
 }
 
+export interface TimelineTask {
+  id: string;
+  title: string;
+  description?: string;
+  startDate?: string;
+  targetDate: string;
+  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
+  assignedWorkerIds?: string[];
+}
+
 export interface TimelinePhase {
   id: string;
   name: string;
-  startDate?: string;
-  targetDate: string; // ISO Date string
+  description?: string;
+  startDate: string;
+  targetDate: string; // Goal date - ISO Date string
   status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
+  tasks: TimelineTask[]; // Sub-works within the phase
 }
 
 export interface ProjectUpdate {
