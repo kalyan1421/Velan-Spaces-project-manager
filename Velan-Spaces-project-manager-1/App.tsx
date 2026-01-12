@@ -155,7 +155,7 @@ const HeadDashboard = ({ onLogout }: { onLogout: () => void }) => {
 
     if (selectedProject) {
         return (
-            <div className="min-h-screen bg-surface-alt">
+            <div className="min-h-screen elegant-bg">
                 <Header title="Administrator" onLogout={onLogout} />
                 <div className="max-w-7xl mx-auto px-6 py-8">
                     <button onClick={() => setSelectedProject(null)} className="mb-6 text-neutral-400 hover:text-primary flex items-center gap-2 text-sm font-bold uppercase tracking-wider transition-colors">
@@ -169,7 +169,7 @@ const HeadDashboard = ({ onLogout }: { onLogout: () => void }) => {
     }
 
     return (
-        <div className="min-h-screen bg-surface-alt">
+        <div className="min-h-screen elegant-bg">
             <Header title="Admin Dashboard" subtitle="Overview" onLogout={onLogout} />
             <main className="max-w-7xl mx-auto px-6 py-12">
                 <div className="flex justify-between items-end mb-10">
@@ -224,7 +224,7 @@ const ManagerDashboard = ({ currentUser, onLogout }: { currentUser: any, onLogou
 
     if (selectedProject) {
         return (
-            <div className="min-h-screen bg-surface-alt">
+            <div className="min-h-screen elegant-bg">
                 <Header title="Manager" onLogout={onLogout} />
                 <div className="max-w-7xl mx-auto px-6 py-8">
                      <button onClick={() => setSelectedProject(null)} className="mb-6 text-neutral-400 hover:text-primary flex items-center gap-2 text-sm font-bold uppercase tracking-wider transition-colors">
@@ -238,7 +238,7 @@ const ManagerDashboard = ({ currentUser, onLogout }: { currentUser: any, onLogou
     }
 
     return (
-        <div className="min-h-screen bg-surface-alt">
+        <div className="min-h-screen elegant-bg">
             <Header title={`Hello, ${currentUser.name}`} subtitle="Manager Portal" onLogout={onLogout} />
             <main className="max-w-5xl mx-auto px-6 py-12">
                  <h2 className="font-serif font-bold text-2xl text-primary mb-8">Assigned Projects</h2>
@@ -315,19 +315,34 @@ const App = () => {
   if (role === 'WORKER') return <WorkerDashboard currentUser={currentUser} onLogout={() => setRole(null)} />; // Render WorkerDashboard
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
-       <div className="p-8 flex justify-between items-center">
-           <VelanLogo />
+    <div className="min-h-screen login-bg flex flex-col">
+       {/* Header with logo and navigation */}
+       <div className="p-8 flex justify-between items-center relative z-10">
+           <VelanLogo size="normal" />
            <div className="flex gap-6 text-xs font-bold uppercase tracking-widest text-neutral-400">
-               <button onClick={() => setLoginMode('CLIENT')} className={loginMode === 'CLIENT' ? 'text-accent-hover' : 'hover:text-primary'}>Client</button>
-               <button onClick={() => setLoginMode('MANAGER')} className={loginMode === 'MANAGER' ? 'text-accent-hover' : 'hover:text-primary'}>Manager</button>
-               <button onClick={() => setLoginMode('HEAD')} className={loginMode === 'HEAD' ? 'text-accent-hover' : 'hover:text-primary'}>Admin</button>
-               <button onClick={() => setLoginMode('WORKER')} className={loginMode === 'WORKER' ? 'text-accent-hover' : 'hover:text-primary'}>Worker</button>
+               <button onClick={() => setLoginMode('CLIENT')} className={`transition-colors ${loginMode === 'CLIENT' ? 'text-primary' : 'hover:text-primary'}`}>
+                   {loginMode === 'CLIENT' && <span className="inline-block w-1.5 h-1.5 bg-accent rounded-full mr-2"></span>}Client
+               </button>
+               <button onClick={() => setLoginMode('MANAGER')} className={`transition-colors ${loginMode === 'MANAGER' ? 'text-primary' : 'hover:text-primary'}`}>
+                   {loginMode === 'MANAGER' && <span className="inline-block w-1.5 h-1.5 bg-accent rounded-full mr-2"></span>}Manager
+               </button>
+               <button onClick={() => setLoginMode('HEAD')} className={`transition-colors ${loginMode === 'HEAD' ? 'text-primary' : 'hover:text-primary'}`}>
+                   {loginMode === 'HEAD' && <span className="inline-block w-1.5 h-1.5 bg-accent rounded-full mr-2"></span>}Admin
+               </button>
+               <button onClick={() => setLoginMode('WORKER')} className={`transition-colors ${loginMode === 'WORKER' ? 'text-primary' : 'hover:text-primary'}`}>
+                   {loginMode === 'WORKER' && <span className="inline-block w-1.5 h-1.5 bg-accent rounded-full mr-2"></span>}Worker
+               </button>
            </div>
        </div>
        
-       <div className="flex-1 flex items-center justify-center p-6">
+       {/* Main login content */}
+       <div className="flex-1 flex items-center justify-center p-6 relative z-10">
            <div className="w-full max-w-md text-center">
+               {/* Large centered logo for login */}
+               <div className="flex justify-center mb-8">
+                   <VelanLogo size="large" showText={false} />
+               </div>
+               
                <h1 className="font-serif font-bold text-4xl mb-2 text-primary">
                    {loginMode === 'CLIENT' ? 'View Project' : loginMode === 'MANAGER' ? 'Manager Portal' : loginMode === 'WORKER' ? 'Worker Login' : 'Admin Access'}
                </h1>
@@ -338,9 +353,9 @@ const App = () => {
                <form onSubmit={handleLogin} className="space-y-5 text-left">
                    {loginMode === 'CLIENT' ? (
                        <div className="relative group">
-                           <div className="absolute inset-0 bg-accent/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                           <div className="absolute inset-0 bg-accent/30 blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                            <input 
-                               className="relative w-full bg-neutral-50 border-2 border-neutral-100 rounded-2xl py-5 text-center text-2xl font-serif font-bold tracking-widest uppercase focus:border-accent focus:ring-0 outline-none transition-all placeholder:text-neutral-300" 
+                               className="relative w-full bg-white border-2 border-neutral-200 rounded-2xl py-5 text-center text-2xl font-serif font-bold tracking-widest uppercase focus:border-accent focus:ring-0 outline-none transition-all placeholder:text-neutral-300 shadow-sm" 
                                placeholder="PRJ-ID"
                                value={inputId}
                                onChange={(e) => setInputId(e.target.value)}
@@ -349,7 +364,7 @@ const App = () => {
                    ) : (
                        <>
                            <Input label={loginMode === 'HEAD' ? "Username" : (loginMode === 'MANAGER' ? "Manager ID" : "Worker ID")} value={inputId} onChange={(e:any) => setInputId(e.target.value)} />
-                           {loginMode !== 'WORKER' && ( // Workers don't need password yet
+                           {loginMode !== 'WORKER' && (
                                <Input label="Password" type="password" value={password} onChange={(e:any) => setPassword(e.target.value)} />
                            )}
                        </>
@@ -357,10 +372,17 @@ const App = () => {
                    
                    {error && <div className="text-red-500 text-xs text-center font-bold uppercase tracking-wider">{error}</div>}
                    
-                   <Button type="submit" variant="primary" className="w-full py-4 text-sm uppercase tracking-widest shadow-velan mt-4">
+                   <Button type="submit" variant="accent" className="w-full py-4 text-sm uppercase tracking-widest mt-4 border-2 border-primary/10">
                        Enter Workspace
                    </Button>
                </form>
+               
+               {/* Decorative line */}
+               <div className="mt-12 flex items-center justify-center gap-4">
+                   <div className="h-px w-12 bg-neutral-200"></div>
+                   <span className="text-[0.6rem] text-neutral-300 uppercase tracking-widest">Velan Spaces</span>
+                   <div className="h-px w-12 bg-neutral-200"></div>
+               </div>
            </div>
        </div>
     </div>

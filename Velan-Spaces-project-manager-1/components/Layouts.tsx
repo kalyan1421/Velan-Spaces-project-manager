@@ -51,27 +51,68 @@ export const Input = ({ label, ...props }: any) => (
   </div>
 );
 
-export const VelanLogo = ({ className = "h-12" }: { className?: string }) => (
-    <div className={`flex items-center gap-4 ${className}`}>
-        {/* Geometric Line Art Logo: House roof + Sun */}
-        <div className="relative w-12 h-12 flex-shrink-0">
-             <div className="absolute inset-0 border-2 border-primary rounded-lg transform rotate-3"></div>
-             <div className="absolute inset-0 bg-white border-2 border-primary rounded-lg flex items-center justify-center overflow-hidden">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-primary w-8 h-8 relative z-10">
-                      <path d="M3 12L12 4L21 12" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M5 12V20H19V12" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M9 15H15" strokeLinecap="round"/>
-                  </svg>
-                  {/* Sun Accent */}
-                  <div className="absolute top-2 right-2 w-3 h-3 bg-accent rounded-full shadow-[0_0_8px_rgba(249,231,104,0.8)]"></div>
-             </div>
+export const VelanLogo = ({ className = "h-12", showText = true, size = "normal" }: { className?: string, showText?: boolean, size?: "small" | "normal" | "large" }) => {
+    const dimensions = size === "small" ? "w-10 h-10" : size === "large" ? "w-20 h-20" : "w-14 h-14";
+    
+    return (
+        <div className={`flex items-center gap-4 ${className}`}>
+            {/* Velan Spaces Logo - House with interior */}
+            <div className={`relative ${dimensions} flex-shrink-0`}>
+                <svg viewBox="0 0 100 100" fill="none" className="w-full h-full">
+                    {/* Sun */}
+                    <circle cx="82" cy="12" r="10" fill="#F9E768"/>
+                    
+                    {/* House Roof */}
+                    <path d="M10 50 L50 15 L90 50" stroke="#1a1a1a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                    
+                    {/* Ceiling Lamp */}
+                    <line x1="50" y1="15" x2="50" y2="32" stroke="#1a1a1a" strokeWidth="1.5"/>
+                    <path d="M42 32 L50 32 L58 32 L55 42 L45 42 Z" stroke="#1a1a1a" strokeWidth="1.5" fill="none"/>
+                    
+                    {/* Lamp Light Glow */}
+                    <path d="M45 42 L35 65 L65 65 L55 42" fill="url(#lampGlow)" opacity="0.4"/>
+                    
+                    {/* Floor Lamp */}
+                    <line x1="18" y1="55" x2="18" y2="85" stroke="#1a1a1a" strokeWidth="1.5"/>
+                    <path d="M12 48 L18 55 L24 48 L12 48" stroke="#1a1a1a" strokeWidth="1.5" fill="none"/>
+                    <line x1="14" y1="85" x2="22" y2="85" stroke="#1a1a1a" strokeWidth="1.5"/>
+                    
+                    {/* Couch */}
+                    <rect x="30" y="60" width="40" height="20" rx="3" stroke="#1a1a1a" strokeWidth="2" fill="none"/>
+                    <rect x="32" y="55" width="8" height="8" rx="1" stroke="#1a1a1a" strokeWidth="1.5" fill="none"/>
+                    <rect x="60" y="55" width="8" height="8" rx="1" stroke="#1a1a1a" strokeWidth="1.5" fill="none"/>
+                    {/* Couch cushions */}
+                    <rect x="38" y="66" width="6" height="6" rx="1" stroke="#1a1a1a" strokeWidth="1" fill="none"/>
+                    <rect x="47" y="66" width="6" height="6" rx="1" stroke="#1a1a1a" strokeWidth="1" fill="none"/>
+                    <rect x="56" y="66" width="6" height="6" rx="1" stroke="#1a1a1a" strokeWidth="1" fill="none"/>
+                    {/* Couch legs */}
+                    <line x1="33" y1="80" x2="33" y2="85" stroke="#1a1a1a" strokeWidth="1.5"/>
+                    <line x1="67" y1="80" x2="67" y2="85" stroke="#1a1a1a" strokeWidth="1.5"/>
+                    
+                    {/* Side Table */}
+                    <ellipse cx="80" cy="72" rx="8" ry="3" stroke="#1a1a1a" strokeWidth="1.5" fill="none"/>
+                    <line x1="76" y1="72" x2="76" y2="85" stroke="#1a1a1a" strokeWidth="1.5"/>
+                    <line x1="84" y1="72" x2="84" y2="85" stroke="#1a1a1a" strokeWidth="1.5"/>
+                    <line x1="74" y1="82" x2="86" y2="82" stroke="#1a1a1a" strokeWidth="1"/>
+                    
+                    {/* Gradient for lamp glow */}
+                    <defs>
+                        <linearGradient id="lampGlow" x1="50" y1="42" x2="50" y2="65" gradientUnits="userSpaceOnUse">
+                            <stop offset="0%" stopColor="#F9E768" stopOpacity="0.8"/>
+                            <stop offset="100%" stopColor="#F9E768" stopOpacity="0"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+            </div>
+            {showText && (
+                <div className="flex flex-col">
+                    <span className="font-serif font-bold text-2xl tracking-tight text-primary">VELAN SPACES</span>
+                    <span className="text-[0.55rem] text-neutral-400 tracking-[0.25em] uppercase font-medium">Elevating Spaces Into Masterpieces</span>
+                </div>
+            )}
         </div>
-        <div className="flex flex-col">
-            <span className="font-serif font-bold text-2xl tracking-tight text-primary">VELAN SPACES</span>
-            <span className="text-[0.6rem] text-neutral-400 tracking-[0.2em] uppercase font-medium">Elevating Spaces Into Masterpieces</span>
-        </div>
-    </div>
-);
+    );
+};
 
 interface HeaderProps {
   title: string;

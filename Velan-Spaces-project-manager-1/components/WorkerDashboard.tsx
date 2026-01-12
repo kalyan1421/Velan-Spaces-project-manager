@@ -28,7 +28,7 @@ export const WorkerDashboard: React.FC<WorkerDashboardProps> = ({ currentUser, o
 
   if (selectedProject) {
     return (
-      <div className="min-h-screen bg-surface-alt">
+      <div className="min-h-screen elegant-bg">
         <Header title="Worker Portal" subtitle={selectedProject.projectName} onLogout={onLogout} />
         <div className="max-w-7xl mx-auto px-6 py-8">
           <button onClick={() => setSelectedProject(null)} className="mb-6 text-neutral-400 hover:text-primary flex items-center gap-2 text-sm font-bold uppercase tracking-wider transition-colors">
@@ -42,7 +42,7 @@ export const WorkerDashboard: React.FC<WorkerDashboardProps> = ({ currentUser, o
   }
 
   return (
-    <div className="min-h-screen bg-surface-alt">
+    <div className="min-h-screen elegant-bg">
       <Header title={`Hello, ${currentUser.name}`} subtitle="My Tasks" onLogout={onLogout} />
       <main className="max-w-5xl mx-auto px-6 py-12">
         <h2 className="font-serif font-bold text-2xl text-primary mb-8">Assigned Projects</h2>

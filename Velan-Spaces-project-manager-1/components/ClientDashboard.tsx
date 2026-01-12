@@ -37,7 +37,7 @@ export const ClientDashboard = ({ project, onLogout }: { project: Project, onLog
   };
 
   return (
-    <div className="min-h-screen bg-surface-alt font-sans">
+    <div className="min-h-screen elegant-bg font-sans">
       <Header title="Project Dashboard" onLogout={onLogout} />
       
       <main className="max-w-5xl mx-auto px-6 py-12">
