@@ -25,7 +25,7 @@ class DesignsTab extends ConsumerWidget {
       backgroundColor: Colors.transparent,
       floatingActionButton: isManager
           ? FloatingActionButton.extended(
-              onPressed: () => _showUploadDialog(context, ref),
+              onPressed: () => _showUploadBottomSheet(context, ref),
               label: const Text('Upload Design', style: TextStyle(fontWeight: FontWeight.bold)),
               icon: const Icon(Icons.add),
               backgroundColor: Colors.black,
@@ -74,10 +74,14 @@ class DesignsTab extends ConsumerWidget {
     );
   }
 
-  void _showUploadDialog(BuildContext context, WidgetRef ref) {
-    showDialog(
+  void _showUploadBottomSheet(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
       context: context,
-      builder: (context) => _UploadDesignDialog(projectId: projectId),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => _UploadDesignSheet(projectId: projectId),
     );
   }
 }
@@ -242,15 +246,15 @@ class _DesignCard extends ConsumerWidget {
   }
 }
 
-class _UploadDesignDialog extends ConsumerStatefulWidget {
-  const _UploadDesignDialog({required this.projectId});
+class _UploadDesignSheet extends ConsumerStatefulWidget {
+  const _UploadDesignSheet({required this.projectId});
   final String projectId;
 
   @override
-  ConsumerState<_UploadDesignDialog> createState() => _UploadDesignDialogState();
+  ConsumerState<_UploadDesignSheet> createState() => _UploadDesignSheetState();
 }
 
-class _UploadDesignDialogState extends ConsumerState<_UploadDesignDialog> {
+class _UploadDesignSheetState extends ConsumerState<_UploadDesignSheet> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   String _selectedType = '2D Plan';
@@ -309,16 +313,24 @@ class _UploadDesignDialogState extends ConsumerState<_UploadDesignDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Upload Design'),
-      content: Form(
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+        left: 16,
+        right: 16,
+        top: 16,
+      ),
+      child: Form(
         key: _formKey,
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            Text('Upload Design', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
             TextFormField(
               controller: _titleController,
-              decoration: const InputDecoration(labelText: 'Title'),
+              decoration: const InputDecoration(labelText: 'Title', border: OutlineInputBorder()),
               validator: (v) => v == null || v.isEmpty ? 'Required' : null,
             ),
             const SizedBox(height: 16),
@@ -329,34 +341,38 @@ class _UploadDesignDialogState extends ConsumerState<_UploadDesignDialog> {
                 DropdownMenuItem(value: '3D Render', child: Text('3D Render')),
               ],
               onChanged: (v) => setState(() => _selectedType = v!),
-              decoration: const InputDecoration(labelText: 'Type'),
+              decoration: const InputDecoration(labelText: 'Type', border: OutlineInputBorder()),
             ),
             const SizedBox(height: 16),
             OutlinedButton.icon(
               onPressed: _pickFile,
               icon: const Icon(Icons.upload_file),
               label: Text(_fileName ?? 'Select File (PDF/Image)'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
             ),
             if (_filePath == null)
                const Padding(
                  padding: EdgeInsets.only(top: 8.0),
                  child: Text('No file selected', style: TextStyle(color: Colors.red, fontSize: 12)),
                ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _isLoading ? null : _upload,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.black,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+              child: _isLoading 
+                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Text('Upload'),
+            ),
+            const SizedBox(height: 16),
           ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: _isLoading ? null : _upload,
-          child: _isLoading 
-            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-            : const Text('Upload'),
-        ),
-      ],
     );
   }
 }

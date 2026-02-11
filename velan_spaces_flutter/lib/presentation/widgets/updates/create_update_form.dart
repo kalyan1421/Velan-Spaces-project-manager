@@ -186,175 +186,177 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
       ),
       child: Form(
         key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // ─── Input Type Toggle ────────────────────────
-            SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(
-                  value: 'message',
-                  label: Text('Message'),
-                  icon: Icon(Icons.chat_bubble_outline),
-                ),
-                ButtonSegment(
-                  value: 'photo',
-                  label: Text('Photo'),
-                  icon: Icon(Icons.photo_outlined),
-                ),
-                ButtonSegment(
-                  value: 'video',
-                  label: Text('Video'),
-                  icon: Icon(Icons.videocam_outlined),
-                ),
-              ],
-              selected: {_type},
-              onSelectionChanged: (Set<String> newSelection) {
-                final type = newSelection.first;
-                if (type != 'message') {
-                  _pickMedia(type);
-                } else {
-                  _clearMedia();
-                }
-              },
-              style: ButtonStyle(
-                visualDensity: VisualDensity.compact,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // ─── Media Preview ────────────────────────────
-            if (_mediaFile != null)
-              Stack(
-                alignment: Alignment.topRight,
-                children: [
-                  Container(
-                    height: 200,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: Colors.black,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.grey.withOpacity(0.3)),
-                    ),
-                    child: _type == 'photo'
-                        ? Image.file(
-                            File(_mediaFile!.path),
-                            fit: BoxFit.contain,
-                          )
-                        : _videoController != null && _videoController!.value.isInitialized
-                            ? AspectRatio(
-                                aspectRatio: _videoController!.value.aspectRatio,
-                                child: VideoPlayer(_videoController!),
-                              )
-                            : const Center(child: CircularProgressIndicator()),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // ─── Input Type Toggle ────────────────────────
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(
+                    value: 'message',
+                    label: Text('Message'),
+                    icon: Icon(Icons.chat_bubble_outline),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    style: IconButton.styleFrom(backgroundColor: Colors.black45),
-                    onPressed: _clearMedia,
+                  ButtonSegment(
+                    value: 'photo',
+                    label: Text('Photo'),
+                    icon: Icon(Icons.photo_outlined),
+                  ),
+                  ButtonSegment(
+                    value: 'video',
+                    label: Text('Video'),
+                    icon: Icon(Icons.videocam_outlined),
+                  ),
+                ],
+                selected: {_type},
+                onSelectionChanged: (Set<String> newSelection) {
+                  final type = newSelection.first;
+                  if (type != 'message') {
+                    _pickMedia(type);
+                  } else {
+                    _clearMedia();
+                  }
+                },
+                style: ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+              const SizedBox(height: 16),
+  
+              // ─── Media Preview ────────────────────────────
+              if (_mediaFile != null)
+                Stack(
+                  alignment: Alignment.topRight,
+                  children: [
+                    Container(
+                      height: 200,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.black,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                      ),
+                      child: _type == 'photo'
+                          ? Image.file(
+                              File(_mediaFile!.path),
+                              fit: BoxFit.contain,
+                            )
+                          : _videoController != null && _videoController!.value.isInitialized
+                              ? AspectRatio(
+                                  aspectRatio: _videoController!.value.aspectRatio,
+                                  child: VideoPlayer(_videoController!),
+                                )
+                              : const Center(child: CircularProgressIndicator()),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      style: IconButton.styleFrom(backgroundColor: Colors.black45),
+                      onPressed: _clearMedia,
+                    ),
+                  ],
+                ),
+              if (_mediaFile != null) const SizedBox(height: 16),
+  
+              // ─── Content ──────────────────────────────────
+              TextFormField(
+                controller: _contentController,
+                decoration: const InputDecoration(
+                  labelText: 'Update Description',
+                  hintText: 'What work was done today?',
+                  border: OutlineInputBorder(),
+                  alignLabelWithHint: true,
+                ),
+                maxLines: 3,
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Please enter a description';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+  
+              // ─── Metadata (Category, Room, Workers) ───────
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  // Category
+                  DropdownMenu<String>(
+                    width: 160,
+                    hintText: 'Category',
+                    dropdownMenuEntries: _categories
+                        .map((c) => DropdownMenuEntry(value: c, label: c))
+                        .toList(),
+                    onSelected: (v) => setState(() => _selectedCategory = v),
+                    inputDecorationTheme: const InputDecorationTheme(
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+  
+                  // Room
+                  DropdownMenu<String>(
+                    width: 160,
+                    hintText: 'Select Room',
+                    enabled: rooms.isNotEmpty,
+                    dropdownMenuEntries: rooms
+                        .map((r) => DropdownMenuEntry(value: r.id, label: r.name))
+                        .toList(),
+                    onSelected: (v) => setState(() => _selectedRoomId = v),
+                    inputDecorationTheme: const InputDecorationTheme(
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                      border: OutlineInputBorder(),
+                    ),
                   ),
                 ],
               ),
-            if (_mediaFile != null) const SizedBox(height: 16),
-
-            // ─── Content ──────────────────────────────────
-            TextFormField(
-              controller: _contentController,
-              decoration: const InputDecoration(
-                labelText: 'Update Description',
-                hintText: 'What work was done today?',
-                border: OutlineInputBorder(),
-                alignLabelWithHint: true,
-              ),
-              maxLines: 3,
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter a description';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
-
-            // ─── Metadata (Category, Room, Workers) ───────
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                // Category
-                DropdownMenu<String>(
-                  width: 160,
-                  hintText: 'Category',
-                  dropdownMenuEntries: _categories
-                      .map((c) => DropdownMenuEntry(value: c, label: c))
-                      .toList(),
-                  onSelected: (v) => setState(() => _selectedCategory = v),
-                  inputDecorationTheme: const InputDecorationTheme(
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                    border: OutlineInputBorder(),
-                  ),
+              const SizedBox(height: 12),
+              
+              // Workers Multi-select Chip (Simplified)
+              // Ideally use a MultiSelectDialog, but utilizing FilterChip for now
+              if (workers.isNotEmpty) ...[
+                const Text('Tag Workers:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 6,
+                  children: workers.map((w) {
+                    final isSelected = _selectedWorkerIds.contains(w.id);
+                    return FilterChip(
+                      label: Text(w.name),
+                      selected: isSelected,
+                      onSelected: (selected) {
+                        setState(() {
+                           if (selected) {
+                             _selectedWorkerIds.add(w.id);
+                           } else {
+                             _selectedWorkerIds.remove(w.id);
+                           }
+                        });
+                      },
+                    );
+                  }).toList(),
                 ),
-
-                // Room
-                DropdownMenu<String>(
-                  width: 160,
-                  hintText: 'Select Room',
-                  enabled: rooms.isNotEmpty,
-                  dropdownMenuEntries: rooms
-                      .map((r) => DropdownMenuEntry(value: r.id, label: r.name))
-                      .toList(),
-                  onSelected: (v) => setState(() => _selectedRoomId = v),
-                  inputDecorationTheme: const InputDecorationTheme(
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                    border: OutlineInputBorder(),
-                  ),
-                ),
+                const SizedBox(height: 16),
               ],
-            ),
-            const SizedBox(height: 12),
-
-            // Workers Multi-select Chip (Simplified)
-            // Ideally use a MultiSelectDialog, but utilizing FilterChip for now
-            if (workers.isNotEmpty) ...[
-              const Text('Tag Workers:', style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 4),
-              Wrap(
-                spacing: 6,
-                children: workers.map((w) {
-                  final isSelected = _selectedWorkerIds.contains(w.id);
-                  return FilterChip(
-                    label: Text(w.name),
-                    selected: isSelected,
-                    onSelected: (selected) {
-                      setState(() {
-                         if (selected) {
-                           _selectedWorkerIds.add(w.id);
-                         } else {
-                           _selectedWorkerIds.remove(w.id);
-                         }
-                      });
-                    },
-                  );
-                }).toList(),
+  
+              // ─── Submit Button ────────────────────────────
+              SizedBox(
+                height: 48,
+                child: FilledButton.icon(
+                  onPressed: _isPosting ? null : _submit,
+                  icon: _isPosting 
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.send),
+                  label: Text(_isPosting ? 'Posting...' : 'Post Update'),
+                ),
               ),
-              const SizedBox(height: 16),
             ],
-
-            // ─── Submit Button ────────────────────────────
-            SizedBox(
-              height: 48,
-              child: FilledButton.icon(
-                onPressed: _isPosting ? null : _submit,
-                icon: _isPosting 
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.send),
-                label: Text(_isPosting ? 'Posting...' : 'Post Update'),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

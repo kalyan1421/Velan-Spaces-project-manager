@@ -15,6 +15,7 @@ import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart'
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:velan_spaces_flutter/data/datasources/storage_datasource.dart';
 import 'package:velan_spaces_flutter/data/datasources/firebase_storage_datasource.dart';
+import 'package:velan_spaces_flutter/presentation/providers/worker_manager_providers.dart';
 
 // ─── Datasource & Repository ──────────────────────────────────────────
 
@@ -173,7 +174,7 @@ class ProjectCreationNotifier extends StateNotifier<AsyncValue<String?>> {
   }
 }
 
-import 'package:velan_spaces_flutter/presentation/providers/worker_manager_providers.dart';
+
 
 // ─── Workers (for tagging) ─────────────────────────────────────────────
 

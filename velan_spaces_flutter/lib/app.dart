@@ -15,7 +15,7 @@ class App extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: VelanTheme.lightTheme,
       darkTheme: VelanTheme.darkTheme,
-      themeMode: ThemeMode.dark,
+      themeMode: ThemeMode.light,
       routerConfig: router,
     );
   }

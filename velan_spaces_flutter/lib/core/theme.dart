@@ -8,7 +8,7 @@ class VelanTheme {
   static const Color accent = Color(0xFF0F3460);
   static const Color accentBright = Color(0xFF533483);
   // Updated to match logo sun (Yellow/Gold)
-  static const Color highlight = Color(0xFFFFD54F); // Pastel Gold/Yellow
+  static const Color highlight = Color(0xFFFFB347); // Pastel Gold/Yellow (Matches Login)
   static const Color gold = Color(0xFFFFD54F);
   static const Color success = Color(0xFF00C853);
   static const Color surface = Color(0xFF1E1E30);

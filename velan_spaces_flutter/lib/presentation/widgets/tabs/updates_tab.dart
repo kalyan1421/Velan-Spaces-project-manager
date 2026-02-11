@@ -43,7 +43,12 @@ class _UpdatesTabState extends ConsumerState<UpdatesTab> {
                           ),
                         ],
                       ),
-                      CreateUpdateForm(projectId: widget.projectId),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: MediaQuery.of(context).size.height * 0.6,
+                        ),
+                        child: CreateUpdateForm(projectId: widget.projectId),
+                      ),
                     ],
                   )
                 : SizedBox(

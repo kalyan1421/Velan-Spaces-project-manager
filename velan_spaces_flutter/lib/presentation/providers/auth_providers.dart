@@ -11,6 +11,7 @@ import 'package:velan_spaces_flutter/data/datasources/worker_manager_datasource.
 import 'package:velan_spaces_flutter/data/datasources/firestore_worker_manager_datasource.dart';
 import 'package:velan_spaces_flutter/data/datasources/firestore_project_datasource.dart';
 import 'package:velan_spaces_flutter/data/datasources/project_datasource.dart';
+import 'package:velan_spaces_flutter/core/session_service.dart';
 
 // ─── Core Firebase Providers ──────────────────────────────────────────
 
@@ -62,6 +63,40 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserEntity?>> {
 
   AuthRepository get _authRepository => _ref.read(authRepositoryProvider);
 
+  /// Helper to set role/meta and persist to storage
+  Future<void> _setSessionAndPersist(UserRole role, Map<String, dynamic> meta) async {
+    _ref.read(currentUserRoleProvider.notifier).state = role;
+    _ref.read(currentUserMetaProvider.notifier).state = meta;
+    await SessionService.saveSession(role: role, meta: meta);
+  }
+
+  /// Restore a previous session from secure storage (called on app startup)
+  Future<bool> restoreSession() async {
+    final session = await SessionService.loadSession();
+    if (session == null) return false;
+
+    // Check if Firebase still has a valid user
+    final firebaseUser = FirebaseAuth.instance.currentUser;
+    if (firebaseUser == null) {
+      // Firebase session expired, clear local session too
+      await SessionService.clearSession();
+      return false;
+    }
+
+    // Restore role and metadata
+    _ref.read(currentUserRoleProvider.notifier).state = session.role;
+    _ref.read(currentUserMetaProvider.notifier).state = session.meta;
+
+    // Create a simple UserEntity from the existing Firebase user
+    state = AsyncValue.data(UserEntity(
+      uid: firebaseUser.uid,
+      email: firebaseUser.email,
+    ));
+
+    print('✅ Session restored: ${session.role.name}');
+    return true;
+  }
+
   /// HEAD login with hardcoded credentials (admin / 12345)
   Future<bool> signInAsHead(String password) async {
     print('🔑 Attempting Admin Login with password: $password');
@@ -79,11 +114,11 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserEntity?>> {
         state = AsyncValue.error(failure.message, StackTrace.current);
         return false;
       },
-      (user) {
+      (user) async {
         print('✅ Admin Login Successful. User ID: ${user.uid}');
         state = AsyncValue.data(user);
-        _ref.read(currentUserRoleProvider.notifier).state = UserRole.head;
-        _ref.read(currentUserMetaProvider.notifier).state = {'name': 'Admin'};
+        final meta = {'name': 'Admin'};
+        await _setSessionAndPersist(UserRole.head, meta);
         return true;
       },
     );
@@ -108,13 +143,10 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserEntity?>> {
           state = AsyncValue.error(failure.message, StackTrace.current);
           return false;
         },
-        (user) {
+        (user) async {
           state = AsyncValue.data(user);
-          _ref.read(currentUserRoleProvider.notifier).state = UserRole.manager;
-          _ref.read(currentUserMetaProvider.notifier).state = {
-            'name': name,
-            'id': name,
-          };
+          final meta = {'name': name, 'id': name};
+          await _setSessionAndPersist(UserRole.manager, meta);
           return true;
         },
       );
@@ -139,13 +171,10 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserEntity?>> {
           state = AsyncValue.error(failure.message, StackTrace.current);
           return false;
         },
-        (user) {
+        (user) async {
           state = AsyncValue.data(user);
-          _ref.read(currentUserRoleProvider.notifier).state = UserRole.worker;
-          _ref.read(currentUserMetaProvider.notifier).state = {
-            'name': name,
-            'id': name,
-          };
+          final meta = {'name': name, 'id': name};
+          await _setSessionAndPersist(UserRole.worker, meta);
           return true;
         },
       );
@@ -179,12 +208,10 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserEntity?>> {
           state = AsyncValue.error(failure.message, StackTrace.current);
           return false;
         },
-        (user) {
+        (user) async {
           state = AsyncValue.data(user);
-          _ref.read(currentUserRoleProvider.notifier).state = UserRole.client;
-          _ref.read(currentUserMetaProvider.notifier).state = {
-            'projectId': projectId.trim(),
-          };
+          final meta = {'projectId': projectId.trim()};
+          await _setSessionAndPersist(UserRole.client, meta);
           return true;
         },
       );
@@ -196,6 +223,8 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserEntity?>> {
 
   Future<void> signOut() async {
     state = const AsyncValue.loading();
+    // Clear persisted session first
+    await SessionService.clearSession();
     final result = await _authRepository.signOut();
     result.fold(
       (failure) => state = AsyncValue.error(failure.message, StackTrace.current),

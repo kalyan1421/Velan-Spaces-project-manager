@@ -137,55 +137,55 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     return Column(
                       children: [
                         // Velan Logo
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(8),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.05),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              padding: const EdgeInsets.all(4),
-                              child: Image.asset(
-                                'assets/images/logo.png',
-                                fit: BoxFit.contain,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'VELAN',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 1,
-                                    color: const Color(0xFF1A1A2E),
-                                  ),
-                                ),
-                                Text(
-                                  'SPACES',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 1,
-                                    color: const Color(0xFF1A1A2E),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
+                        // Row(
+                        //   mainAxisAlignment: MainAxisAlignment.center,
+                        //   children: [
+                        //     Container(
+                        //       width: 40,
+                        //       height: 40,
+                        //       decoration: BoxDecoration(
+                        //         color: Colors.white,
+                        //         borderRadius: BorderRadius.circular(8),
+                        //         boxShadow: [
+                        //           BoxShadow(
+                        //             color: Colors.black.withOpacity(0.05),
+                        //             blurRadius: 10,
+                        //             offset: const Offset(0, 2),
+                        //           ),
+                        //         ],
+                        //       ),
+                        //       padding: const EdgeInsets.all(4),
+                        //       child: Image.asset(
+                        //         'assets/images/logo.png',
+                        //         fit: BoxFit.contain,
+                        //       ),
+                        //     ),
+                        //     const SizedBox(width: 12),
+                        //     Column(
+                        //       crossAxisAlignment: CrossAxisAlignment.start,
+                        //       children: [
+                        //         Text(
+                        //           'VELAN',
+                        //           style: GoogleFonts.outfit(
+                        //             fontSize: 18,
+                        //             fontWeight: FontWeight.w700,
+                        //             letterSpacing: 1,
+                        //             color: const Color(0xFF1A1A2E),
+                        //           ),
+                        //         ),
+                        //         Text(
+                        //           'SPACES',
+                        //           style: GoogleFonts.outfit(
+                        //             fontSize: 18,
+                        //             fontWeight: FontWeight.w700,
+                        //             letterSpacing: 1,
+                        //             color: const Color(0xFF1A1A2E),
+                        //           ),
+                        //         ),
+                        //       ],
+                        //     ),
+                        //   ],
+                        // ),
                         const SizedBox(height: 24),
                         // Tab buttons - wrap in SingleChildScrollView for safety on very small screens
                         SingleChildScrollView(
@@ -438,7 +438,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   controller: _idController,
                                   style: GoogleFonts.inter(
                                     fontSize: 15,
-                                    color: Colors.white,
+                                    color: Colors.black,
                                   ),
                                   decoration: InputDecoration(
                                     border: OutlineInputBorder(
@@ -501,7 +501,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   obscureText: true,
                                   style: GoogleFonts.inter(
                                     fontSize: 15,
-                                    color: Colors.white,
+                                    color: Colors.black,
                                   ),
                                   decoration: InputDecoration(
                                     border: OutlineInputBorder(

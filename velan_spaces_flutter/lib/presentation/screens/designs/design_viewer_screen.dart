@@ -3,6 +3,7 @@ import 'package:flutter_cached_pdfview/flutter_cached_pdfview.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:velan_spaces_flutter/core/theme.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class DesignViewerScreen extends StatelessWidget {
   const DesignViewerScreen({
@@ -45,7 +46,7 @@ class DesignViewerScreen extends StatelessWidget {
 
   Widget _buildImageView() {
     return PhotoView(
-      imageProvider: NetworkImage(url),
+      imageProvider: CachedNetworkImageProvider(url),
       loadingBuilder: (context, event) => const Center(
         child: CircularProgressIndicator(),
       ),

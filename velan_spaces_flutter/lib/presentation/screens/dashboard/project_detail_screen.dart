@@ -10,6 +10,7 @@ import 'package:velan_spaces_flutter/presentation/widgets/tabs/workers_tab.dart'
 import 'package:velan_spaces_flutter/presentation/widgets/tabs/rooms_tab.dart';
 import 'package:velan_spaces_flutter/presentation/widgets/tabs/settlements_tab.dart';
 import 'package:velan_spaces_flutter/presentation/widgets/tabs/budget_tab.dart';
+import 'package:velan_spaces_flutter/presentation/providers/design_prefetch_provider.dart';
 
 class ProjectDetailScreen extends ConsumerStatefulWidget {
   const ProjectDetailScreen({required this.projectId, super.key});
@@ -21,7 +22,7 @@ class ProjectDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late TabController _tabController;
 
   List<_TabInfo> _getTabsForRole(UserRole role) {
@@ -102,6 +103,9 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
       _tabController.dispose();
       _tabController = TabController(length: tabs.length, vsync: this);
     }
+    
+    // Start prefetching designs
+    ref.watch(designPrefetchProvider(widget.projectId));
 
     return projectAsync.when(
       data: (project) {
