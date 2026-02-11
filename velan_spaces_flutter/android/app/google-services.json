@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "502284969422",
+    "project_id": "velan-spaces-constructions",
+    "storage_bucket": "velan-spaces-constructions.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:502284969422:android:c5338d34bbed3b358b779f",
+        "android_client_info": {
+          "package_name": "com.velanspaces.velan_spaces_flutter"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDYnumRkpAk0OZ7J40J0DqiwJyeU1hPaEQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

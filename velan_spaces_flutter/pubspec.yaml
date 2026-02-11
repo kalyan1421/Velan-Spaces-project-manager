@@ -1,0 +1,63 @@
+name: velan_spaces_flutter
+description: "A new Flutter project."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Core
+  cupertino_icons: ^1.0.8
+  fpdart: ^1.1.0
+  cached_network_image: ^3.3.1
+  connectivity_plus: ^6.0.3
+  flutter_secure_storage: ^9.2.2
+
+  # Firebase
+  firebase_core: ^3.1.1
+  cloud_firestore: ^5.0.2
+  firebase_auth: ^5.1.1
+  firebase_storage: ^12.1.1
+
+  # State Management (Riverpod)
+  flutter_riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5
+
+  # Routing
+  go_router: ^14.2.0
+  intl: ^0.20.2
+
+  # UI
+  google_fonts: ^6.2.1
+  image_picker: ^1.0.7
+  file_picker: ^8.0.0
+  url_launcher: ^6.2.5
+  flutter_cached_pdfview: ^0.4.3
+  photo_view: ^0.15.0
+  video_player: ^2.8.6
+  chewie: ^1.8.1
+
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^4.0.0
+
+  # Code Generation
+  build_runner: ^2.4.9
+  go_router_builder: ^2.4.1
+  riverpod_generator: ^2.4.0
+
+  # Lints
+  custom_lint: ^0.6.4
+  riverpod_lint: ^2.3.10
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
