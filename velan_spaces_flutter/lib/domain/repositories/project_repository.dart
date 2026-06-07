@@ -7,6 +7,8 @@ import 'package:velan_spaces_flutter/domain/entities/file_entity.dart';
 import 'package:velan_spaces_flutter/domain/entities/room_entity.dart';
 import 'package:velan_spaces_flutter/domain/entities/design_document_entity.dart';
 import 'package:velan_spaces_flutter/domain/entities/expense_entity.dart';
+import 'package:velan_spaces_flutter/domain/entities/project_chat_message_entity.dart';
+import 'package:velan_spaces_flutter/domain/entities/project_complaint_entity.dart';
 
 abstract class ProjectRepository {
   // Projects
@@ -15,6 +17,7 @@ abstract class ProjectRepository {
   Future<Either<Failure, String>> createProject(ProjectEntity project);
   Future<Either<Failure, ProjectEntity>> getProjectById(String projectId);
   Future<Either<Failure, void>> updateProject(String projectId, Map<String, dynamic> data);
+  Future<Either<Failure, void>> deleteProject(String projectId);
 
   // Updates
   Stream<Either<Failure, List<ProjectUpdateEntity>>> watchProjectUpdates(String projectId);
@@ -41,8 +44,22 @@ abstract class ProjectRepository {
   Stream<Either<Failure, List<RoomEntity>>> watchRooms(String projectId);
   Future<Either<Failure, String>> addRoom(String projectId, RoomEntity room);
   Future<Either<Failure, void>> updateRoom(String projectId, String roomId, Map<String, dynamic> data);
+  Future<Either<Failure, void>> deleteRoom(String projectId, String roomId);
 
   // Expenses (formerly Budget Transactions)
   Stream<Either<Failure, List<ExpenseEntity>>> watchExpenses(String projectId);
   Future<Either<Failure, void>> addExpense(String projectId, ExpenseEntity expense);
+  Future<Either<Failure, void>> updateExpense(String projectId, String expenseId, Map<String, dynamic> data);
+  Future<Either<Failure, void>> deleteExpense(String projectId, String expenseId);
+
+  // Project support
+  Stream<Either<Failure, List<ProjectChatMessageEntity>>> watchProjectChatMessages(String projectId);
+  Future<Either<Failure, void>> addProjectChatMessage(String projectId, ProjectChatMessageEntity message);
+  Stream<Either<Failure, List<ProjectComplaintEntity>>> watchProjectComplaints(String projectId);
+  Future<Either<Failure, void>> addProjectComplaint(String projectId, ProjectComplaintEntity complaint);
+  Future<Either<Failure, void>> updateProjectComplaint(
+    String projectId,
+    String complaintId,
+    Map<String, dynamic> data,
+  );
 }

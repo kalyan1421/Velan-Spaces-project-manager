@@ -2,10 +2,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:velan_spaces_flutter/domain/entities/manager_entity.dart';
 import 'package:velan_spaces_flutter/domain/entities/worker_entity.dart';
+import 'package:velan_spaces_flutter/domain/entities/project_entity.dart';
 import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart';
 
 import 'package:velan_spaces_flutter/data/models/worker_model.dart';
+import 'package:velan_spaces_flutter/data/models/manager_model.dart';
 import 'package:velan_spaces_flutter/data/datasources/worker_manager_datasource.dart';
+import 'package:velan_spaces_flutter/presentation/providers/project_providers.dart';
 
 final allManagersProvider = StreamProvider<List<ManagerEntity>>((ref) {
   final ds = ref.watch(workerManagerDatasourceProvider);
@@ -32,6 +35,7 @@ class WorkerManagerController extends StateNotifier<AsyncValue<void>> {
 
   Future<bool> addWorker({
     required String name,
+    required String password,
     String? phone,
     String? trade,
     String? assignToProjectId,
@@ -46,6 +50,7 @@ class WorkerManagerController extends StateNotifier<AsyncValue<void>> {
         name: name,
         phone: phone ?? '',
         trade: trade ?? '',
+        password: password,
         assignedProjects: assignedProjects,
       );
 
@@ -70,4 +75,123 @@ class WorkerManagerController extends StateNotifier<AsyncValue<void>> {
       return false;
     }
   }
+
+  // ─── Manager CRUD ──────────────────────────────────────────────────────
+
+  Future<bool> addManager({
+    required String name,
+    required String password,
+    String phone = '',
+    String email = '',
+  }) async {
+    state = const AsyncValue.loading();
+    try {
+      final manager = ManagerModel(
+        id: '',
+        name: name,
+        phone: phone,
+        email: email,
+        password: password,
+        isSuspended: false,
+        assignedProjects: const [],
+      );
+      await _datasource.addManager(manager);
+      state = const AsyncValue.data(null);
+      return true;
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+      return false;
+    }
+  }
+
+  Future<bool> updateManager({
+    required String managerId,
+    required String name,
+    required String password,
+    required bool isSuspended,
+    String phone = '',
+    String email = '',
+  }) async {
+    state = const AsyncValue.loading();
+    try {
+      await _datasource.updateManager(managerId, {
+        'name': name,
+        'phone': phone,
+        'email': email,
+        'password': password,
+        'isSuspended': isSuspended,
+      });
+      state = const AsyncValue.data(null);
+      return true;
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+      return false;
+    }
+  }
+
+  Future<bool> deleteManager(String managerId) async {
+    state = const AsyncValue.loading();
+    try {
+      await _datasource.deleteManager(managerId);
+      state = const AsyncValue.data(null);
+      return true;
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+      return false;
+    }
+  }
+
+  // ─── Worker CRUD ──────────────────────────────────────────────────────
+
+  Future<bool> updateWorker({
+    required String workerId,
+    required String name,
+    required String password,
+    String phone = '',
+    String trade = '',
+  }) async {
+    state = const AsyncValue.loading();
+    try {
+      await _datasource.updateWorker(workerId, {
+        'name': name,
+        'phone': phone,
+        'trade': trade,
+        'password': password,
+      });
+      state = const AsyncValue.data(null);
+      return true;
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+      return false;
+    }
+  }
+
+  Future<bool> deleteWorker(String workerId) async {
+    state = const AsyncValue.loading();
+    try {
+      await _datasource.deleteWorker(workerId);
+      state = const AsyncValue.data(null);
+      return true;
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+      return false;
+    }
+  }
 }
+
+/// Provider that enriches each manager with their assigned project details
+final managerWithProjectsProvider =
+    Provider.family<AsyncValue<List<ProjectEntity>>, List<String>>((ref, projectIds) {
+  if (projectIds.isEmpty) return const AsyncValue.data([]);
+  
+  // We use the allProjects stream from project_providers and filter
+  final allProjectsAsync = ref.watch(allProjectsProvider);
+  return allProjectsAsync.when(
+    data: (projects) {
+      final matching = projects.where((p) => projectIds.contains(p.id)).toList();
+      return AsyncValue.data(matching);
+    },
+    loading: () => const AsyncValue.loading(),
+    error: (e, st) => AsyncValue.error(e, st),
+  );
+});

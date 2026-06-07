@@ -3,12 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:velan_spaces_flutter/core/theme.dart';
 import 'package:velan_spaces_flutter/domain/entities/project_update_entity.dart';
+import 'package:velan_spaces_flutter/domain/entities/user_role.dart';
 import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart';
 import 'package:velan_spaces_flutter/presentation/providers/project_providers.dart';
 import 'package:velan_spaces_flutter/presentation/screens/designs/design_viewer_screen.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
-import 'package:velan_spaces_flutter/domain/entities/room_entity.dart';
 
 class UpdateCard extends ConsumerStatefulWidget {
   const UpdateCard({
@@ -82,6 +82,7 @@ class _UpdateCardState extends ConsumerState<UpdateCard> {
       });
       _commentController.clear();
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to post comment: $e')),
       );
@@ -107,13 +108,18 @@ class _UpdateCardState extends ConsumerState<UpdateCard> {
   Widget build(BuildContext context) {
     final update = widget.update;
     final dateStr = DateFormat('MMM d, y • h:mm a').format(update.timestamp);
+    final role = ref.watch(currentUserRoleProvider);
+    final canComment =
+        role == UserRole.head || role == UserRole.manager || role == UserRole.worker;
 
     // Fetch room name if roomId is present (optional optimization: fetch all rooms once in parent)
-    final roomName = update.roomId != null 
+    final roomName = update.roomId != null
         ? ref.watch(projectRoomsProvider(widget.projectId)).when(
-            data: (rooms) => rooms.firstWhere((r) => r.id == update.roomId, orElse: () => RoomEntity(id: '', name: 'Unknown Room', assignedWorkerIds: [])).name,
+            data: (rooms) =>
+                rooms.where((r) => r.id == update.roomId).firstOrNull?.name ??
+                'Unknown Room',
             loading: () => 'Loading...',
-            error: (_,__) => 'Unknown Room')
+            error: (_, __) => 'Unknown Room')
         : null;
 
     return Card(
@@ -130,7 +136,7 @@ class _UpdateCardState extends ConsumerState<UpdateCard> {
               children: [
                 CircleAvatar(
                   radius: 18,
-                  backgroundColor: VelanTheme.highlight.withOpacity(0.1),
+                  backgroundColor: VelanTheme.highlight.withValues(alpha: 0.1),
                   child: Text(
                     update.postedBy.isNotEmpty ? update.postedBy[0].toUpperCase() : '?',
                     style: const TextStyle(fontWeight: FontWeight.bold, color: VelanTheme.highlight),
@@ -151,7 +157,7 @@ class _UpdateCardState extends ConsumerState<UpdateCard> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
+                    color: Colors.blue.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
@@ -240,38 +246,44 @@ class _UpdateCardState extends ConsumerState<UpdateCard> {
             ],
             
             // Comment Input
-            Row(
-              children: [
-                Expanded(
-                  child: SizedBox(
-                    height: 36,
-                    child: TextField(
-                      controller: _commentController,
-                      decoration: InputDecoration(
-                        hintText: 'Add a comment...',
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(18),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
+            if (canComment)
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 36,
+                      child: TextField(
+                        controller: _commentController,
+                        decoration: InputDecoration(
+                          hintText: 'Add a comment...',
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(18),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          filled: true,
+                          fillColor: Colors.grey.shade50,
                         ),
-                        filled: true,
-                        fillColor: Colors.grey.shade50,
+                        style: const TextStyle(fontSize: 13),
                       ),
-                      style: const TextStyle(fontSize: 13),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: _isPostingComment ? null : _postComment,
-                  icon: _isPostingComment 
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.send, size: 20, color: VelanTheme.highlight),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-              ],
-            ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: _isPostingComment ? null : _postComment,
+                    icon: _isPostingComment 
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.send, size: 20, color: VelanTheme.highlight),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              )
+            else
+              Text(
+                'Comments are read-only for clients.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
           ],
         ),
       ),
@@ -282,9 +294,9 @@ class _UpdateCardState extends ConsumerState<UpdateCard> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         label,

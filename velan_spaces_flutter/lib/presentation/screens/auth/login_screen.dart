@@ -11,7 +11,7 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  String _selectedTab = 'CLIENT'; // CLIENT, MANAGER, ADMIN
+  String _selectedTab = 'CLIENT'; // CLIENT, MANAGER, ADMIN, WORKER
   final _idController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
@@ -47,6 +47,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       case 'CLIENT':
         success = await notifier.signInAsClient(_idController.text);
         break;
+      case 'WORKER':
+        success = await notifier.signInAsWorker(
+          _idController.text,
+          password: _passwordController.text,
+        );
+        break;
     }
 
     if (!success && mounted) {
@@ -60,42 +66,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
-  Widget _buildTabButton(String label, String tab) {
-    final isActive = _selectedTab == tab;
-    return InkWell(
-      onTap: () => setState(() {
-        _selectedTab = tab;
-        _idController.clear();
-        _passwordController.clear();
-        _errorMessage = null;
-      }),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (isActive)
-            Container(
-              width: 6,
-              height: 6,
-              margin: const EdgeInsets.only(right: 8),
-              decoration: const BoxDecoration(
-                color: Color(0xFFFFB347), // gold
-                shape: BoxShape.circle,
-              ),
-            ),
-          Text(
-            label,
-            style: GoogleFonts.outfit(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.5,
-              color: isActive ? const Color(0xFF1A1A2E) : const Color(0xFFB0B0C0),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     // Determine heading and subtitle based on selected tab
@@ -104,7 +74,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     switch (_selectedTab) {
       case 'CLIENT':
         heading = 'View Project';
-        subtitle = 'ENTER YOUR ID TO TRACK PROGRESS';
+        subtitle = 'ENTER YOUR PROJECT CODE TO TRACK PROGRESS';
         break;
       case 'MANAGER':
         heading = 'Manager Portal';
@@ -114,9 +84,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         heading = 'Admin Access';
         subtitle = 'SIGN IN TO MANAGE WORKSPACE';
         break;
+      case 'WORKER':
+        heading = 'Worker Access';
+        subtitle = 'ENTER YOUR WORKER ID AND PASSWORD';
+        break;
       default:
         heading = 'View Project';
-        subtitle = 'ENTER YOUR ID TO TRACK PROGRESS';
+        subtitle = 'ENTER YOUR PROJECT CODE TO TRACK PROGRESS';
     }
 
     return Scaffold(
@@ -124,153 +98,55 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // ─── Header with Logo and Tabs ────────────────────────────
+            // ─── Header with Role Selection Dropdown ──────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(32, 32, 32, 0),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  // If width is constrained (mobile), use Column
-                  // 600 is a common breakpoint
-                  bool isMobile = MediaQuery.of(context).size.width < 600;
-                  
-                  if (isMobile) {
-                    return Column(
-                      children: [
-                        // Velan Logo
-                        // Row(
-                        //   mainAxisAlignment: MainAxisAlignment.center,
-                        //   children: [
-                        //     Container(
-                        //       width: 40,
-                        //       height: 40,
-                        //       decoration: BoxDecoration(
-                        //         color: Colors.white,
-                        //         borderRadius: BorderRadius.circular(8),
-                        //         boxShadow: [
-                        //           BoxShadow(
-                        //             color: Colors.black.withOpacity(0.05),
-                        //             blurRadius: 10,
-                        //             offset: const Offset(0, 2),
-                        //           ),
-                        //         ],
-                        //       ),
-                        //       padding: const EdgeInsets.all(4),
-                        //       child: Image.asset(
-                        //         'assets/images/logo.png',
-                        //         fit: BoxFit.contain,
-                        //       ),
-                        //     ),
-                        //     const SizedBox(width: 12),
-                        //     Column(
-                        //       crossAxisAlignment: CrossAxisAlignment.start,
-                        //       children: [
-                        //         Text(
-                        //           'VELAN',
-                        //           style: GoogleFonts.outfit(
-                        //             fontSize: 18,
-                        //             fontWeight: FontWeight.w700,
-                        //             letterSpacing: 1,
-                        //             color: const Color(0xFF1A1A2E),
-                        //           ),
-                        //         ),
-                        //         Text(
-                        //           'SPACES',
-                        //           style: GoogleFonts.outfit(
-                        //             fontSize: 18,
-                        //             fontWeight: FontWeight.w700,
-                        //             letterSpacing: 1,
-                        //             color: const Color(0xFF1A1A2E),
-                        //           ),
-                        //         ),
-                        //       ],
-                        //     ),
-                        //   ],
-                        // ),
-                        const SizedBox(height: 24),
-                        // Tab buttons - wrap in SingleChildScrollView for safety on very small screens
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              _buildTabButton('Client', 'CLIENT'),
-                              const SizedBox(width: 24),
-                              _buildTabButton('Manager', 'MANAGER'),
-                              const SizedBox(width: 24),
-                              _buildTabButton('Admin', 'ADMIN'),
-                            ],
-                          ),
-                        ),
+              child: Align(
+                alignment: Alignment.topRight,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _selectedTab,
+                      icon: const Icon(Icons.keyboard_arrow_down, color: Color(0xFF1A1A2E)),
+                      dropdownColor: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      style: GoogleFonts.outfit(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.2,
+                        color: const Color(0xFF1A1A2E),
+                      ),
+                      onChanged: (String? newValue) {
+                        if (newValue != null) {
+                          setState(() {
+                            _selectedTab = newValue;
+                            _idController.clear();
+                            _passwordController.clear();
+                            _errorMessage = null;
+                          });
+                        }
+                      },
+                      items: const [
+                        DropdownMenuItem(value: 'CLIENT', child: Text('CLIENT')),
+                        DropdownMenuItem(value: 'MANAGER', child: Text('MANAGER')),
+                        DropdownMenuItem(value: 'ADMIN', child: Text('ADMIN')),
+                        DropdownMenuItem(value: 'WORKER', child: Text('WORKER')),
                       ],
-                    );
-                  } else {
-                    // Desktop/Tablet Row layout
-                    return Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        // Velan Logo
-                        Row(
-                          children: [
-                            Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(8),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.05),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              padding: const EdgeInsets.all(4),
-                              child: Image.asset(
-                                'assets/images/logo.png',
-                                fit: BoxFit.contain,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'VELAN',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 1,
-                                    color: const Color(0xFF1A1A2E),
-                                  ),
-                                ),
-                                Text(
-                                  'SPACES',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 1,
-                                    color: const Color(0xFF1A1A2E),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        // Tab buttons
-                        Row(
-                          children: [
-                            _buildTabButton('Client', 'CLIENT'),
-                            const SizedBox(width: 24),
-                            _buildTabButton('Manager', 'MANAGER'),
-                            const SizedBox(width: 24),
-                            _buildTabButton('Admin', 'ADMIN'),
-                          ],
-                        ),
-                      ],
-                    );
-                  }
-                }
+                    ),
+                  ),
+                ),
               ),
             ),
 
@@ -304,7 +180,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             borderRadius: BorderRadius.circular(24),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.08),
+                                color: Colors.black.withValues(alpha: 0.08),
                                 blurRadius: 20,
                                 offset: const Offset(0, 4),
                               ),
@@ -346,14 +222,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                         // Input Fields
                         if (_selectedTab == 'CLIENT')
-                          // Client: Only PRJ-ID
+                          // Client or Worker: Only ID
                           Container(
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(16),
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFFFFB347).withOpacity(0.15),
+                                  color: const Color(0xFFFFB347).withValues(alpha: 0.15),
                                   blurRadius: 30,
                                   offset: const Offset(0, 8),
                                 ),
@@ -369,7 +245,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 color: const Color(0xFF1A1A2E),
                               ),
                               decoration: InputDecoration(
-                                hintText: 'PRJ-ID',
+                                hintText: _selectedTab == 'CLIENT' ? 'PRJ-ID' : 'WORKER-ID',
                                 hintStyle: GoogleFonts.lustria(
                                   fontSize: 24,
                                   fontWeight: FontWeight.w700,
@@ -410,9 +286,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Label
                               Text(
-                                _selectedTab == 'MANAGER' ? 'MANAGER ID' : 'USERNAME',
+                                _selectedTab == 'MANAGER' 
+                                    ? 'MANAGER ID' 
+                                    : _selectedTab == 'WORKER' 
+                                        ? 'WORKER ID' 
+                                        : 'USERNAME',
                                 style: GoogleFonts.inter(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w600,
@@ -428,7 +307,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   borderRadius: BorderRadius.circular(16),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withOpacity(0.05),
+                                      color: Colors.black.withValues(alpha: 0.05),
                                       blurRadius: 10,
                                       offset: const Offset(0, 2),
                                     ),
@@ -490,7 +369,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   borderRadius: BorderRadius.circular(16),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withOpacity(0.05),
+                                      color: Colors.black.withValues(alpha: 0.05),
                                       blurRadius: 10,
                                       offset: const Offset(0, 2),
                                     ),
@@ -561,7 +440,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                         ],
 
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 20),
+
+
 
                         // Enter Workspace Button
                         SizedBox(
@@ -576,7 +457,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 borderRadius: BorderRadius.circular(16),
                               ),
                               elevation: 0,
-                              shadowColor: const Color(0xFFFFB347).withOpacity(0.3),
+                              shadowColor: const Color(0xFFFFB347).withValues(alpha: 0.3),
                             ),
                             child: _isLoading
                                 ? const SizedBox(

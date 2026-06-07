@@ -89,4 +89,14 @@ class FirestoreWorkerManagerDatasourceImpl implements WorkerManagerDatasource {
     }
     return null;
   }
+
+  @override
+  Future<void> deleteManager(String managerId) async {
+    await _firestore.collection(_managersCollection).doc(managerId).delete();
+  }
+
+  @override
+  Future<void> deleteWorker(String workerId) async {
+    await _firestore.collection(_workersCollection).doc(workerId).delete();
+  }
 }

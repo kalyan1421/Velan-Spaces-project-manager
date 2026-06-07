@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 class ProjectEntity {
   const ProjectEntity({
     required this.id,
+    required this.projectCode,
     required this.projectName,
     required this.clientName,
     required this.location,
@@ -11,6 +12,7 @@ class ProjectEntity {
     required this.currentSpend,
     required this.isComplete,
     required this.managerIds,
+    this.budgetAccessManagerIds = const [],
     this.estimatedCost = 0,
     this.completionPercentage = 0,
     this.startDate,
@@ -22,6 +24,7 @@ class ProjectEntity {
   });
 
   final String id;
+  final String projectCode;
   final String projectName;
   final String clientName;
   final String clientPhone;
@@ -33,6 +36,7 @@ class ProjectEntity {
   final int completionPercentage;
   final bool isComplete;
   final List<String> managerIds;
+  final List<String> budgetAccessManagerIds;
   final List<String> workerIds;
   final DateTime? startDate;
   final DateTime? targetEndDate;

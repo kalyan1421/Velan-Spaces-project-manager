@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:velan_spaces_flutter/core/theme.dart';
+import 'package:velan_spaces_flutter/core/utils/bottom_sheet_utils.dart';
 import 'package:velan_spaces_flutter/domain/entities/user_role.dart';
 import 'package:velan_spaces_flutter/domain/entities/design_document_entity.dart';
 import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart';
+import 'package:velan_spaces_flutter/presentation/providers/notification_providers.dart';
 import 'package:velan_spaces_flutter/presentation/providers/project_providers.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:velan_spaces_flutter/presentation/screens/designs/design_viewer_screen.dart';
-import 'package:path/path.dart' as path;
 import 'package:intl/intl.dart';
 
 class DesignsTab extends ConsumerWidget {
@@ -25,6 +26,7 @@ class DesignsTab extends ConsumerWidget {
       backgroundColor: Colors.transparent,
       floatingActionButton: isManager
           ? FloatingActionButton.extended(
+              heroTag: 'designs_fab',
               onPressed: () => _showUploadBottomSheet(context, ref),
               label: const Text('Upload Design', style: TextStyle(fontWeight: FontWeight.bold)),
               icon: const Icon(Icons.add),
@@ -124,25 +126,13 @@ class _DesignCard extends ConsumerWidget {
   }
 
   Future<void> _deleteDesign(BuildContext context, WidgetRef ref) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Design?'),
-        content: const Text('This action cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+    final confirm = await showConfirmBottomSheet(
+      context,
+      title: 'Delete Design?',
+      message: 'This action cannot be undone.',
+      confirmLabel: 'Delete',
+      confirmColor: Colors.red,
     );
-
     if (confirm == true) {
       final repo = ref.read(projectRepositoryProvider);
       await repo.deleteDesign(projectId, design.id, design.fileUrl);
@@ -258,46 +248,93 @@ class _UploadDesignSheetState extends ConsumerState<_UploadDesignSheet> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   String _selectedType = '2D Plan';
-  String? _filePath;
-  String? _fileName;
+  final List<String> _filePaths = [];
+  final List<String> _fileNames = [];
   bool _isLoading = false;
 
   Future<void> _pickFile() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+      allowMultiple: true,
     );
 
     if (result != null) {
       setState(() {
-        _filePath = result.files.single.path;
-        _fileName = result.files.single.name;
+        for (final f in result.files) {
+          if (f.path != null) {
+            _filePaths.add(f.path!);
+            _fileNames.add(f.name);
+          }
+        }
       });
     }
   }
 
+  Future<void> _pickFromCamera() async {
+    final picker = ImagePicker();
+    final file = await picker.pickImage(source: ImageSource.camera);
+    if (file != null) {
+      setState(() {
+        _filePaths.add(file.path);
+        _fileNames.add(file.name);
+      });
+    }
+  }
+
+  void _removeFileAt(int index) {
+    setState(() {
+      _filePaths.removeAt(index);
+      _fileNames.removeAt(index);
+    });
+  }
+
   Future<void> _upload() async {
-    if (!_formKey.currentState!.validate() || _filePath == null) return;
-    
+    if (!_formKey.currentState!.validate() || _filePaths.isEmpty) return;
+
     setState(() => _isLoading = true);
 
     try {
       final repo = ref.read(projectRepositoryProvider);
       final userMeta = ref.read(currentUserMetaProvider);
       final userName = userMeta['name'] as String? ?? 'Project Manager';
-      
-      final design = DesignDocumentEntity(
-        id: '', // Will be ignored by addDesign
-        title: _titleController.text,
-        fileUrl: '', // Will be updated by upload logic
-        type: _selectedType,
-        approvalStatus: const DesignApprovalStatus(),
-        postedBy: userName,
-        timestamp: DateTime.now(),
-        projectId: widget.projectId,
-      );
+      final baseTitle = _titleController.text;
+      final multiple = _filePaths.length > 1;
 
-      await repo.addDesign(widget.projectId, design, filePath: _filePath);
+      // Create one design document per selected file.
+      for (var i = 0; i < _filePaths.length; i++) {
+        final design = DesignDocumentEntity(
+          id: '', // Will be ignored by addDesign
+          title: multiple ? '$baseTitle (${i + 1})' : baseTitle,
+          fileUrl: '', // Will be updated by upload logic
+          type: _selectedType,
+          approvalStatus: const DesignApprovalStatus(),
+          postedBy: userName,
+          timestamp: DateTime.now(),
+          projectId: widget.projectId,
+        );
+
+        await repo.addDesign(widget.projectId, design, filePath: _filePaths[i]);
+      }
+
+      // ─── Notification trigger ─────────────────────────────
+      try {
+        final role = ref.read(currentUserRoleProvider);
+        if (role == UserRole.manager || role == UserRole.worker) {
+          final meta = ref.read(currentUserMetaProvider);
+          final project = await repo.getProjectById(widget.projectId)
+              .then((r) => r.fold((_) => null, (p) => p));
+          final ns = ref.read(notificationServiceProvider);
+          await ns.notifyAdminOfDesign(
+            projectId: widget.projectId,
+            projectName: project?.projectName ?? '',
+            senderName: userName,
+            senderId: meta['id'] as String? ?? '',
+            fileName: _titleController.text,
+          );
+        }
+      } catch (_) {}
+      // ─────────────────────────────────────────────────────
       
       if (mounted) Navigator.pop(context);
     } catch (e) {
@@ -335,7 +372,7 @@ class _UploadDesignSheetState extends ConsumerState<_UploadDesignSheet> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: _selectedType,
+              initialValue: _selectedType,
               items: const [
                 DropdownMenuItem(value: '2D Plan', child: Text('2D Plan')),
                 DropdownMenuItem(value: '3D Render', child: Text('3D Render')),
@@ -344,15 +381,59 @@ class _UploadDesignSheetState extends ConsumerState<_UploadDesignSheet> {
               decoration: const InputDecoration(labelText: 'Type', border: OutlineInputBorder()),
             ),
             const SizedBox(height: 16),
-            OutlinedButton.icon(
-              onPressed: _pickFile,
-              icon: const Icon(Icons.upload_file),
-              label: Text(_fileName ?? 'Select File (PDF/Image)'),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _pickFromCamera,
+                    icon: const Icon(Icons.camera_alt),
+                    label: const Text('Camera'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _pickFile,
+                    icon: const Icon(Icons.upload_file),
+                    label: const Text('Files'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            if (_filePath == null)
+            if (_fileNames.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (var i = 0; i < _fileNames.length; i++)
+                      Row(
+                        children: [
+                          const Icon(Icons.check_circle, color: Colors.green, size: 16),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              _fileNames[i],
+                              style: const TextStyle(fontSize: 12, color: Colors.green),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          InkWell(
+                            onTap: () => _removeFileAt(i),
+                            child: const Icon(Icons.close, size: 16, color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+            if (_filePaths.isEmpty)
                const Padding(
                  padding: EdgeInsets.only(top: 8.0),
                  child: Text('No file selected', style: TextStyle(color: Colors.red, fontSize: 12)),

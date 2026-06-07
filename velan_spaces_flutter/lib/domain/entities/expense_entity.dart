@@ -13,6 +13,7 @@ class ExpenseEntity {
     required this.projectId,
     required this.paymentMethod,
     this.projectName = '',
+    this.proofUrl = '',
   });
 
   final String id;
@@ -25,4 +26,5 @@ class ExpenseEntity {
   final DateTime? createdAt;
   final String projectId;
   final String projectName;
+  final String proofUrl;
 }

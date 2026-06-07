@@ -41,16 +41,15 @@ class ProjectUpdateModel extends ProjectUpdateEntity {
   Map<String, dynamic> toJson() {
     return {
       'postedBy': postedBy,
-      'role': role.toString().split('.').last,
+      'role': role.toString().split('.').last.toUpperCase(),
       'type': type,
       'content': content,
       'timestamp': Timestamp.fromDate(timestamp),
       'category': category,
       'roomId': roomId,
       'associatedWorkerIds': associatedWorkerIds,
-      if (progressPercentage != null) 'progressPercentage': progressPercentage,
       'mediaUrls': mediaUrls,
+      'isClientViewable': true,
     };
   }
 }
-

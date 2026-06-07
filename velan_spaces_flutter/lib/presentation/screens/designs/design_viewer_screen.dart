@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_cached_pdfview/flutter_cached_pdfview.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:velan_spaces_flutter/core/theme.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 class DesignViewerScreen extends StatelessWidget {
@@ -37,7 +36,7 @@ class DesignViewerScreen extends StatelessWidget {
   }
 
   Widget _buildPdfView() {
-    return PDF().fromUrl(
+    return const PDF().fromUrl(
       url,
       placeholder: (progress) => Center(child: Text('$progress %')),
       errorWidget: (error) => Center(child: Text("Failed to load PDF: $error")),

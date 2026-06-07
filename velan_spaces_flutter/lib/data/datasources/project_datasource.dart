@@ -5,6 +5,8 @@ import 'package:velan_spaces_flutter/data/models/file_model.dart';
 import 'package:velan_spaces_flutter/data/models/room_model.dart';
 import 'package:velan_spaces_flutter/data/models/design_document_model.dart';
 import 'package:velan_spaces_flutter/data/models/expense_model.dart';
+import 'package:velan_spaces_flutter/data/models/project_chat_message_model.dart';
+import 'package:velan_spaces_flutter/data/models/project_complaint_model.dart';
 
 abstract class ProjectDatasource {
   // Projects
@@ -13,6 +15,7 @@ abstract class ProjectDatasource {
   Future<String> createProject(ProjectModel project);
   Future<ProjectModel> getProjectById(String projectId);
   Future<void> updateProject(String projectId, Map<String, dynamic> data);
+  Future<void> deleteProject(String projectId);
 
   // Updates
   Stream<List<ProjectUpdateModel>> watchProjectUpdates(String projectId);
@@ -38,8 +41,24 @@ abstract class ProjectDatasource {
   Stream<List<RoomModel>> watchRooms(String projectId);
   Future<String> addRoom(String projectId, RoomModel room);
   Future<void> updateRoom(String projectId, String roomId, Map<String, dynamic> data);
+  Future<void> deleteRoom(String projectId, String roomId);
 
   // Expenses (formerly Budget Transactions)
   Stream<List<ExpenseModel>> watchExpenses(String projectId);
   Future<void> addExpense(String projectId, ExpenseModel expense);
+  Future<void> updateExpense(String projectId, String expenseId, Map<String, dynamic> data);
+  Future<void> deleteExpense(String projectId, String expenseId);
+
+  // Chat
+  Stream<List<ProjectChatMessageModel>> watchProjectChatMessages(String projectId);
+  Future<void> addProjectChatMessage(String projectId, ProjectChatMessageModel message);
+
+  // Complaints
+  Stream<List<ProjectComplaintModel>> watchProjectComplaints(String projectId);
+  Future<void> addProjectComplaint(String projectId, ProjectComplaintModel complaint);
+  Future<void> updateProjectComplaint(
+    String projectId,
+    String complaintId,
+    Map<String, dynamic> data,
+  );
 }

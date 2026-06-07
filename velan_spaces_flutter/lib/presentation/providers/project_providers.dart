@@ -11,11 +11,15 @@ import 'package:velan_spaces_flutter/domain/entities/room_entity.dart';
 import 'package:velan_spaces_flutter/domain/entities/expense_entity.dart';
 import 'package:velan_spaces_flutter/domain/entities/design_document_entity.dart';
 import 'package:velan_spaces_flutter/domain/entities/worker_entity.dart';
+import 'package:velan_spaces_flutter/domain/entities/project_chat_message_entity.dart';
+import 'package:velan_spaces_flutter/domain/entities/project_complaint_entity.dart';
+import 'package:velan_spaces_flutter/domain/entities/timeline_entity.dart';
 import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:velan_spaces_flutter/data/datasources/storage_datasource.dart';
 import 'package:velan_spaces_flutter/data/datasources/firebase_storage_datasource.dart';
 import 'package:velan_spaces_flutter/presentation/providers/worker_manager_providers.dart';
+import 'package:velan_spaces_flutter/data/repositories/timeline_repository.dart';
 
 // ─── Datasource & Repository ──────────────────────────────────────────
 
@@ -36,6 +40,10 @@ final projectRepositoryProvider = Provider<ProjectRepository>((ref) {
     ref.watch(projectDatasourceProvider),
     ref.watch(storageDatasourceProvider),
   );
+});
+
+final timelineRepositoryProvider = Provider<TimelineRepository>((ref) {
+  return TimelineRepository(firestore: ref.watch(firestoreProvider));
 });
 
 // ─── Project Streams ──────────────────────────────────────────────────
@@ -63,7 +71,8 @@ final managerProjectsProvider = StreamProvider<List<ProjectEntity>>((ref) {
 });
 
 final projectDetailProvider =
-    FutureProvider.family<ProjectEntity, String>((ref, projectId) async {
+    FutureProvider.autoDispose.family<ProjectEntity, String>(
+        (ref, projectId) async {
   final repo = ref.watch(projectRepositoryProvider);
   final result = await repo.getProjectById(projectId);
   return result.fold(
@@ -150,6 +159,86 @@ final projectExpensesProvider =
       );
 });
 
+final projectChatMessagesProvider =
+    StreamProvider.family<List<ProjectChatMessageEntity>, String>((ref, projectId) {
+  final repo = ref.watch(projectRepositoryProvider);
+  return repo.watchProjectChatMessages(projectId).map(
+        (either) => either.fold(
+          (failure) => throw Exception("watchProjectChatMessages failed: ${failure.message}"),
+          (messages) => messages,
+        ),
+      );
+});
+
+final projectComplaintsProvider =
+    StreamProvider.family<List<ProjectComplaintEntity>, String>((ref, projectId) {
+  final repo = ref.watch(projectRepositoryProvider);
+  return repo.watchProjectComplaints(projectId).map(
+        (either) => either.fold(
+          (failure) => throw Exception("watchProjectComplaints failed: ${failure.message}"),
+          (complaints) => complaints,
+        ),
+      );
+});
+
+class AssignedProjectTaskView {
+  const AssignedProjectTaskView({
+    required this.project,
+    required this.phase,
+    required this.task,
+    this.roomName,
+  });
+
+  final ProjectEntity project;
+  final TimelinePhaseEntity phase;
+  final TimelineTaskEntity task;
+  final String? roomName;
+}
+
+final workerAssignedTasksProvider =
+    FutureProvider<List<AssignedProjectTaskView>>((ref) async {
+  final meta = ref.watch(currentUserMetaProvider);
+  final workerId = meta['id'] as String? ?? '';
+  if (workerId.isEmpty) return const [];
+
+  final projects = await ref.watch(allProjectsProvider.future);
+  final myProjects =
+      projects.where((project) => project.workerIds.contains(workerId)).toList();
+  final timelineRepository = ref.watch(timelineRepositoryProvider);
+
+  final result = <AssignedProjectTaskView>[];
+  for (final project in myProjects) {
+    final phases = await timelineRepository.getPhases(project.id);
+    final rooms = await ref.read(projectRoomsProvider(project.id).future);
+    for (final phase in phases) {
+      for (final task in phase.tasks.where((item) => item.assignedWorkerId == workerId)) {
+        String? roomName;
+        if (task.roomId != null) {
+          for (final room in rooms) {
+            if (room.id == task.roomId) {
+              roomName = room.name;
+              break;
+            }
+          }
+        }
+        result.add(AssignedProjectTaskView(
+          project: project,
+          phase: phase,
+          task: task,
+          roomName: roomName,
+        ));
+      }
+    }
+  }
+
+  result.sort((a, b) {
+    final aDate = a.task.plannedEnd ?? a.phase.endDate;
+    final bDate = b.task.plannedEnd ?? b.phase.endDate;
+    return aDate.compareTo(bDate);
+  });
+  return result;
+});
+
 // ─── Project Creation ─────────────────────────────────────────────────
 
 final projectCreationNotifierProvider =
@@ -174,7 +263,66 @@ class ProjectCreationNotifier extends StateNotifier<AsyncValue<String?>> {
   }
 }
 
+// ─── Project Update ───────────────────────────────────────────────────
 
+final projectUpdateNotifierProvider =
+    StateNotifierProvider<ProjectUpdateNotifier, AsyncValue<void>>((ref) {
+  return ProjectUpdateNotifier(ref);
+});
+
+class ProjectUpdateNotifier extends StateNotifier<AsyncValue<void>> {
+  final Ref _ref;
+
+  ProjectUpdateNotifier(this._ref) : super(const AsyncValue.data(null));
+
+  Future<bool> updateProject(String projectId, Map<String, dynamic> data) async {
+    state = const AsyncValue.loading();
+    final repo = _ref.read(projectRepositoryProvider);
+    final result = await repo.updateProject(projectId, data);
+
+    return result.fold(
+      (failure) {
+        state = AsyncValue.error(failure.message, StackTrace.current);
+        return false;
+      },
+      (_) {
+        state = const AsyncValue.data(null);
+        _ref.invalidate(projectDetailProvider(projectId));
+        return true;
+      },
+    );
+  }
+}
+
+// ─── Room Updates ─────────────────────────────────────────────────────
+
+final roomUpdateControllerProvider =
+    StateNotifierProvider<RoomUpdateController, AsyncValue<void>>((ref) {
+  return RoomUpdateController(ref);
+});
+
+class RoomUpdateController extends StateNotifier<AsyncValue<void>> {
+  final Ref _ref;
+
+  RoomUpdateController(this._ref) : super(const AsyncValue.data(null));
+
+  Future<bool> assignWorkersToRoom(String projectId, String roomId, List<String> workerIds) async {
+    state = const AsyncValue.loading();
+    final repo = _ref.read(projectRepositoryProvider);
+    final result = await repo.updateRoom(projectId, roomId, {'assignedWorkerIds': workerIds});
+
+    return result.fold(
+      (failure) {
+        state = AsyncValue.error(failure.message, StackTrace.current);
+        return false;
+      },
+      (_) {
+        state = const AsyncValue.data(null);
+        return true;
+      },
+    );
+  }
+}
 
 // ─── Workers (for tagging) ─────────────────────────────────────────────
 
@@ -202,3 +350,133 @@ final validProjectWorkersProvider =
     error: (err, st) => AsyncValue.error(err, st),
   );
 });
+
+// ─── Add Expense ──────────────────────────────────────────────────────
+
+final addExpenseNotifierProvider =
+    StateNotifierProvider<AddExpenseNotifier, AsyncValue<void>>((ref) {
+  return AddExpenseNotifier(ref);
+});
+
+class AddExpenseNotifier extends StateNotifier<AsyncValue<void>> {
+  final Ref _ref;
+
+  AddExpenseNotifier(this._ref) : super(const AsyncValue.data(null));
+
+  Future<bool> addExpense(String projectId, ExpenseEntity expense) async {
+    state = const AsyncValue.loading();
+    final repo = _ref.read(projectRepositoryProvider);
+    final result = await repo.addExpense(projectId, expense);
+
+    return result.fold(
+      (failure) {
+        state = AsyncValue.error(failure.message, StackTrace.current);
+        return false;
+      },
+      (_) {
+        state = const AsyncValue.data(null);
+        return true;
+      },
+    );
+  }
+}
+
+// ─── Add Settlement ───────────────────────────────────────────────────
+
+final addSettlementNotifierProvider =
+    StateNotifierProvider<AddSettlementNotifier, AsyncValue<void>>((ref) {
+  return AddSettlementNotifier(ref);
+});
+
+class AddSettlementNotifier extends StateNotifier<AsyncValue<void>> {
+  final Ref _ref;
+
+  AddSettlementNotifier(this._ref) : super(const AsyncValue.data(null));
+
+  Future<bool> addSettlement(String projectId, SettlementEntity settlement) async {
+    state = const AsyncValue.loading();
+    final repo = _ref.read(projectRepositoryProvider);
+    final result = await repo.addSettlement(projectId, settlement);
+
+    return result.fold(
+      (failure) {
+        state = AsyncValue.error(failure.message, StackTrace.current);
+        return false;
+      },
+      (_) {
+        state = const AsyncValue.data(null);
+        return true;
+      },
+    );
+  }
+}
+
+final projectSupportControllerProvider =
+    StateNotifierProvider<ProjectSupportController, AsyncValue<void>>((ref) {
+  return ProjectSupportController(ref);
+});
+
+class ProjectSupportController extends StateNotifier<AsyncValue<void>> {
+  ProjectSupportController(this._ref) : super(const AsyncValue.data(null));
+
+  final Ref _ref;
+
+  Future<bool> sendChatMessage(
+    String projectId,
+    ProjectChatMessageEntity message,
+  ) async {
+    state = const AsyncValue.loading();
+    final result =
+        await _ref.read(projectRepositoryProvider).addProjectChatMessage(projectId, message);
+    return result.fold(
+      (failure) {
+        state = AsyncValue.error(failure.message, StackTrace.current);
+        return false;
+      },
+      (_) {
+        state = const AsyncValue.data(null);
+        return true;
+      },
+    );
+  }
+
+  Future<bool> addComplaint(
+    String projectId,
+    ProjectComplaintEntity complaint,
+  ) async {
+    state = const AsyncValue.loading();
+    final result =
+        await _ref.read(projectRepositoryProvider).addProjectComplaint(projectId, complaint);
+    return result.fold(
+      (failure) {
+        state = AsyncValue.error(failure.message, StackTrace.current);
+        return false;
+      },
+      (_) {
+        state = const AsyncValue.data(null);
+        return true;
+      },
+    );
+  }
+
+  Future<bool> updateComplaint(
+    String projectId,
+    String complaintId,
+    Map<String, dynamic> data,
+  ) async {
+    state = const AsyncValue.loading();
+    final result = await _ref
+        .read(projectRepositoryProvider)
+        .updateProjectComplaint(projectId, complaintId, data);
+    return result.fold(
+      (failure) {
+        state = AsyncValue.error(failure.message, StackTrace.current);
+        return false;
+      },
+      (_) {
+        state = const AsyncValue.data(null);
+        return true;
+      },
+    );
+  }
+}

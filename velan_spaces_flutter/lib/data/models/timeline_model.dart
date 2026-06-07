@@ -63,6 +63,10 @@ class TimelineTaskModel extends TimelineTaskEntity {
     super.actualEnd,
     super.assignedWorkerId,
     super.roomId,
+    super.checklistItems,
+    super.comments,
+    super.photoProofUrls,
+    super.priority,
     super.createdAt,
     super.updatedAt,
   });
@@ -82,6 +86,27 @@ class TimelineTaskModel extends TimelineTaskEntity {
       actualEnd: (json['actualEnd'] as Timestamp?)?.toDate(),
       assignedWorkerId: json['assignedWorkerId'],
       roomId: json['roomId'],
+      checklistItems: (json['checklistItems'] as List<dynamic>? ?? const [])
+          .map((item) => TaskChecklistItem(
+                id: item['id'] ?? '',
+                label: item['label'] ?? '',
+                isDone: item['isDone'] ?? false,
+              ))
+          .toList(),
+      comments: (json['comments'] as List<dynamic>? ?? const [])
+          .map((comment) => TaskCommentEntity(
+                id: comment['id'] ?? '',
+                text: comment['text'] ?? '',
+                postedBy: comment['postedBy'] ?? '',
+                postedById: comment['postedById'] ?? '',
+                createdAt: (comment['createdAt'] as Timestamp?)?.toDate(),
+              ))
+          .toList(),
+      photoProofUrls: List<String>.from(json['photoProofUrls'] ?? const []),
+      priority: TaskPriority.values.firstWhere(
+        (priority) => priority.name == json['priority'],
+        orElse: () => TaskPriority.medium,
+      ),
       createdAt: (json['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (json['updatedAt'] as Timestamp?)?.toDate(),
     );
@@ -100,6 +125,26 @@ class TimelineTaskModel extends TimelineTaskEntity {
       'actualEnd': actualEnd != null ? Timestamp.fromDate(actualEnd!) : null,
       'assignedWorkerId': assignedWorkerId,
       'roomId': roomId,
+      'checklistItems': checklistItems
+          .map((item) => {
+                'id': item.id,
+                'label': item.label,
+                'isDone': item.isDone,
+              })
+          .toList(),
+      'comments': comments
+          .map((comment) => {
+                'id': comment.id,
+                'text': comment.text,
+                'postedBy': comment.postedBy,
+                'postedById': comment.postedById,
+                'createdAt': comment.createdAt != null
+                    ? Timestamp.fromDate(comment.createdAt!)
+                    : FieldValue.serverTimestamp(),
+              })
+          .toList(),
+      'photoProofUrls': photoProofUrls,
+      'priority': priority.name,
       'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : null,
       'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,
     };

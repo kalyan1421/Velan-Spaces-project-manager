@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:velan_spaces_flutter/presentation/providers/project_providers.dart';
 import 'package:velan_spaces_flutter/presentation/widgets/dialogs/create_worker_dialog.dart';
 import 'package:velan_spaces_flutter/presentation/providers/worker_manager_providers.dart';
+import 'package:velan_spaces_flutter/presentation/widgets/common/async_value_widget.dart';
 import 'package:velan_spaces_flutter/core/theme.dart';
 
 class WorkersTab extends ConsumerWidget {
@@ -17,6 +18,7 @@ class WorkersTab extends ConsumerWidget {
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'workers_fab',
         onPressed: () {
           CreateWorkerBottomSheet.show(context, projectId: projectId);
         },
@@ -30,8 +32,11 @@ class WorkersTab extends ConsumerWidget {
         ),
         icon: const Icon(Icons.add, color: VelanTheme.primaryDark),
       ),
-      body: projectAsync.when(
-        data: (project) => allWorkersAsync.when(
+      body: AsyncValueWidget(
+        value: projectAsync,
+        data: (project) => AsyncValueWidget(
+          value: allWorkersAsync,
+          emptyMessage: 'No workers assigned yet',
           data: (allWorkers) {
             final assignedWorkers = allWorkers
                 .where((w) => project.workerIds.contains(w.id))
@@ -73,23 +78,17 @@ class WorkersTab extends ConsumerWidget {
                       ),
                     ),
                     title: Text(worker.name),
-                    subtitle: Text(worker.trade ?? 'General'),
-                    trailing: worker.phone != null
-                        ? IconButton(
-                            icon: const Icon(Icons.phone, size: 18),
-                            onPressed: () {},
-                          )
-                        : null,
+                    subtitle: Text(worker.trade),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.phone, size: 18),
+                      onPressed: () {},
+                    ),
                   ),
                 );
               },
             );
           },
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (err, _) => Center(child: Text('Error: $err')),
         ),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => Center(child: Text('Error: $err')),
       ),
     );
   }

@@ -17,6 +17,10 @@ import 'package:velan_spaces_flutter/data/models/expense_model.dart';
 import 'package:velan_spaces_flutter/data/datasources/storage_datasource.dart';
 import 'package:velan_spaces_flutter/domain/entities/design_document_entity.dart';
 import 'package:velan_spaces_flutter/data/models/design_document_model.dart';
+import 'package:velan_spaces_flutter/domain/entities/project_chat_message_entity.dart';
+import 'package:velan_spaces_flutter/domain/entities/project_complaint_entity.dart';
+import 'package:velan_spaces_flutter/data/models/project_chat_message_model.dart';
+import 'package:velan_spaces_flutter/data/models/project_complaint_model.dart';
 
 class ProjectRepositoryImpl implements ProjectRepository {
   final ProjectDatasource datasource;
@@ -51,6 +55,7 @@ class ProjectRepositoryImpl implements ProjectRepository {
     try {
       final projectModel = ProjectModel(
         id: project.id,
+        projectCode: project.projectCode,
         projectName: project.projectName,
         clientName: project.clientName,
         clientPhone: project.clientPhone,
@@ -92,6 +97,16 @@ class ProjectRepositoryImpl implements ProjectRepository {
     }
   }
 
+  @override
+  Future<Either<Failure, void>> deleteProject(String projectId) async {
+    try {
+      await datasource.deleteProject(projectId);
+      return right(null);
+    } catch (e) {
+      return left(ServerFailure(e.toString()));
+    }
+  }
+
   // ─── Updates ─────────────────────────────────────────────────────────
 
   @override
@@ -120,7 +135,6 @@ class ProjectRepositoryImpl implements ProjectRepository {
         category: update.category,
         roomId: update.roomId,
         associatedWorkerIds: update.associatedWorkerIds,
-        progressPercentage: update.progressPercentage,
         mediaUrls: update.mediaUrls,
       );
       await datasource.addUpdate(projectId, model);
@@ -274,6 +288,7 @@ class ProjectRepositoryImpl implements ProjectRepository {
         paidTo: settlement.paidTo,
         paymentMethod: settlement.paymentMethod,
         addedBy: settlement.addedBy,
+        proofUrl: settlement.proofUrl,
       );
       await datasource.addSettlement(projectId, model);
       return right(null);
@@ -342,6 +357,137 @@ class ProjectRepositoryImpl implements ProjectRepository {
     try {
       final model = ExpenseModel.fromEntity(expense);
       await datasource.addExpense(projectId, model);
+      return right(null);
+    } catch (e) {
+      return left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> deleteRoom(
+      String projectId, String roomId) async {
+    try {
+      await datasource.deleteRoom(projectId, roomId);
+      return right(null);
+    } catch (e) {
+      return left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> updateExpense(
+      String projectId, String expenseId, Map<String, dynamic> data) async {
+    try {
+      await datasource.updateExpense(projectId, expenseId, data);
+      return right(null);
+    } catch (e) {
+      return left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> deleteExpense(
+      String projectId, String expenseId) async {
+    try {
+      await datasource.deleteExpense(projectId, expenseId);
+      return right(null);
+    } catch (e) {
+      return left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  Stream<Either<Failure, List<ProjectChatMessageEntity>>> watchProjectChatMessages(
+    String projectId,
+  ) {
+    try {
+      return datasource.watchProjectChatMessages(projectId).map(
+            (messages) =>
+                right<Failure, List<ProjectChatMessageEntity>>(messages),
+          );
+    } catch (e) {
+      return Stream.value(left(ServerFailure(e.toString())));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> addProjectChatMessage(
+    String projectId,
+    ProjectChatMessageEntity message,
+  ) async {
+    try {
+      await datasource.addProjectChatMessage(
+        projectId,
+        ProjectChatMessageModel(
+          id: message.id,
+          projectId: message.projectId,
+          senderId: message.senderId,
+          senderName: message.senderName,
+          senderRole: message.senderRole,
+          content: message.content,
+          messageType: message.messageType,
+          attachmentUrls: message.attachmentUrls,
+          readBy: message.readBy,
+          createdAt: message.createdAt,
+        ),
+      );
+      return right(null);
+    } catch (e) {
+      return left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  Stream<Either<Failure, List<ProjectComplaintEntity>>> watchProjectComplaints(
+    String projectId,
+  ) {
+    try {
+      return datasource.watchProjectComplaints(projectId).map(
+            (complaints) =>
+                right<Failure, List<ProjectComplaintEntity>>(complaints),
+          );
+    } catch (e) {
+      return Stream.value(left(ServerFailure(e.toString())));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> addProjectComplaint(
+    String projectId,
+    ProjectComplaintEntity complaint,
+  ) async {
+    try {
+      await datasource.addProjectComplaint(
+        projectId,
+        ProjectComplaintModel(
+          id: complaint.id,
+          projectId: complaint.projectId,
+          title: complaint.title,
+          description: complaint.description,
+          createdBy: complaint.createdBy,
+          createdByName: complaint.createdByName,
+          status: complaint.status,
+          attachments: complaint.attachments,
+          resolutionNote: complaint.resolutionNote,
+          createdAt: complaint.createdAt,
+          updatedAt: complaint.updatedAt,
+          resolvedAt: complaint.resolvedAt,
+        ),
+      );
+      return right(null);
+    } catch (e) {
+      return left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> updateProjectComplaint(
+    String projectId,
+    String complaintId,
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      await datasource.updateProjectComplaint(projectId, complaintId, data);
       return right(null);
     } catch (e) {
       return left(ServerFailure(e.toString()));

@@ -1,7 +1,6 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:velan_spaces_flutter/data/repositories/timeline_repository.dart';
 import 'package:velan_spaces_flutter/domain/entities/timeline_entity.dart';
-import 'package:velan_spaces_flutter/data/models/timeline_model.dart';
 
 part 'timeline_provider.g.dart';
 
@@ -28,12 +27,14 @@ class Timeline extends _$Timeline {
       startDate: start,
       endDate: end,
       orderIndex: currentList.length,
-      tasks: [],
+      tasks: const [],
       notes: notes,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
-    state = AsyncValue.data([...currentList, newPhase]);
+    state = AsyncValue.data(
+      TimelineRepository.normalizePhases([...currentList, newPhase]),
+    );
   }
 
   void updatePhase(String phaseId, {String? name, DateTime? start, DateTime? end, String? notes, PhaseStatus? status}) {
@@ -51,29 +52,37 @@ class Timeline extends _$Timeline {
       }
       return p;
     }).toList();
-    state = AsyncValue.data(newList);
+    state = AsyncValue.data(TimelineRepository.normalizePhases(newList));
   }
 
   void markPhaseComplete(String phaseId) {
     final currentList = state.value ?? [];
     final newList = currentList.map((p) {
       if (p.id == phaseId) {
-        // Warning: This marks phase complete even if tasks arent. 
-        // Logic can be refined to check tasks first if needed.
         return p.copyWith(status: PhaseStatus.completed, updatedAt: DateTime.now());
       }
       return p;
     }).toList();
-    state = AsyncValue.data(newList);
+    state = AsyncValue.data(TimelineRepository.normalizePhases(newList));
   }
 
   void removePhase(String phaseId) {
     final currentList = state.value ?? [];
     final newList = currentList.where((p) => p.id != phaseId).toList();
-    state = AsyncValue.data(newList);
+    state = AsyncValue.data(TimelineRepository.normalizePhases(newList));
   }
 
-  void addTask(String phaseId, String taskTitle, {String? description, String? workerId, DateTime? plannedStart, DateTime? plannedEnd}) {
+  void addTask(
+    String phaseId,
+    String taskTitle, {
+    String? description,
+    String? workerId,
+    String? roomId,
+    DateTime? plannedStart,
+    DateTime? plannedEnd,
+    List<TaskChecklistItem> checklistItems = const [],
+    TaskPriority priority = TaskPriority.medium,
+  }) {
     final currentList = state.value ?? [];
     final newList = currentList.map((phase) {
       if (phase.id == phaseId) {
@@ -88,21 +97,18 @@ class Timeline extends _$Timeline {
           plannedEnd: plannedEnd,
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
+          roomId: roomId,
+          checklistItems: checklistItems,
+          priority: priority,
         );
-        // Recalculate status based on new tasks
-        // return _updatePhaseStatus(phase.copyWith(tasks: [...phase.tasks, newTask]));
-        // Keep explicit status or auto-update? Spec says status can be manual OR derived.
-        // Let's default to manual for now if user explicitly sets it, otherwise allow auto-progress.
-        // For now, just adding task sets it to In Progress if it was pending?
-        final updatedPhase = phase.copyWith(
+        return phase.copyWith(
           tasks: [...phase.tasks, newTask],
-          updatedAt: DateTime.now()
+          updatedAt: DateTime.now(),
         );
-        return updatedPhase.status == PhaseStatus.pending ? updatedPhase.copyWith(status: PhaseStatus.inProgress) : updatedPhase;
       }
       return phase;
     }).toList();
-    state = AsyncValue.data(newList);
+    state = AsyncValue.data(TimelineRepository.normalizePhases(newList));
   }
 
   void toggleTaskStatus(String phaseId, String taskId) {
@@ -117,20 +123,19 @@ class Timeline extends _$Timeline {
             return task.copyWith(
               status: newStatus,
               updatedAt: DateTime.now(),
+              actualStart: newStatus != TaskStatus.pending
+                  ? (task.actualStart ?? DateTime.now())
+                  : null,
               actualEnd: newStatus == TaskStatus.done ? DateTime.now() : null,
             );
           }
           return task;
         }).toList();
-        
-        // Auto-update phase status if all tasks done?
-        // Spec: "if phase status == completed, verify all tasks done"
-        
         return phase.copyWith(tasks: newTasks, updatedAt: DateTime.now());
       }
       return phase;
     }).toList();
-    state = AsyncValue.data(newList);
+    state = AsyncValue.data(TimelineRepository.normalizePhases(newList));
   }
 
   void reorderPhases(int oldIndex, int newIndex) {
@@ -140,11 +145,11 @@ class Timeline extends _$Timeline {
     currentList.insert(newIndex, item);
 
     // Update order indices
-    final updatedList = currentList.asMap().entries.map((e) {
-      return e.value.copyWith(orderIndex: e.key);
-    }).toList();
+    final updatedList = currentList.asMap().entries
+        .map((e) => e.value.copyWith(orderIndex: e.key))
+        .toList();
 
-    state = AsyncValue.data(updatedList);
+    state = AsyncValue.data(TimelineRepository.normalizePhases(updatedList));
   }
 
   // Helper _updatePhaseStatus removed in favor of explicit actions or simpler logic for now
@@ -157,8 +162,9 @@ class Timeline extends _$Timeline {
 
     state = const AsyncValue.loading();
     try {
-      await _repository.savePhases(projectId, currentList);
-      state = AsyncValue.data(currentList);
+      final normalized = TimelineRepository.normalizePhases(currentList);
+      await _repository.savePhases(projectId, normalized);
+      state = AsyncValue.data(normalized);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
     }

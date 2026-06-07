@@ -13,13 +13,14 @@ class ExpenseModel extends ExpenseEntity {
     required super.projectId,
     required super.paymentMethod,
     super.projectName,
+    super.proofUrl,
   });
 
   factory ExpenseModel.fromSnapshot(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     return ExpenseModel(
       id: doc.id,
-      type: data['type'] ?? 'debit',
+      type: data['type']?.toString().toLowerCase() ?? 'debit',
       amount: (data['amount'] as num?)?.toDouble() ?? 0.0,
       date: DateTime.parse(data['date'] ?? DateTime.now().toIso8601String()),
       accountDetails: data['accountDetails'] ?? '',
@@ -28,6 +29,7 @@ class ExpenseModel extends ExpenseEntity {
       projectId: data['projectId'] ?? '',
       projectName: data['projectName'] ?? '',
       paymentMethod: data['paymentMethod'] ?? '',
+      proofUrl: data['proofUrl'] ?? '',
     );
   }
 
@@ -42,6 +44,7 @@ class ExpenseModel extends ExpenseEntity {
       'projectId': projectId,
       'projectName': projectName,
       'paymentMethod': paymentMethod,
+      'proofUrl': proofUrl,
     };
   }
 
@@ -57,6 +60,7 @@ class ExpenseModel extends ExpenseEntity {
       projectId: entity.projectId,
       projectName: entity.projectName,
       paymentMethod: entity.paymentMethod,
+      proofUrl: entity.proofUrl,
     );
   }
 }

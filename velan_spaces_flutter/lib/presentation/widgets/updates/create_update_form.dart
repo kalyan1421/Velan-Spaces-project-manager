@@ -3,12 +3,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:velan_spaces_flutter/core/theme.dart';
 import 'package:velan_spaces_flutter/domain/entities/project_update_entity.dart';
-import 'package:velan_spaces_flutter/domain/entities/user_role.dart';
 import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart';
+import 'package:velan_spaces_flutter/presentation/providers/notification_providers.dart';
 import 'package:velan_spaces_flutter/presentation/providers/project_providers.dart';
 import 'package:video_player/video_player.dart';
+import 'package:velan_spaces_flutter/core/services/media_compression_service.dart';
 
 class CreateUpdateForm extends ConsumerStatefulWidget {
   const CreateUpdateForm({required this.projectId, super.key});
@@ -28,10 +28,14 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
   String? _selectedRoomId;
   final List<String> _selectedWorkerIds = [];
   
-  XFile? _mediaFile;
+  XFile? _mediaFile; // single video file when _type == 'video'
+  final List<XFile> _photoFiles = []; // multiple photos when _type == 'photo'
   VideoPlayerController? _videoController;
 
   bool _isPosting = false;
+  String? _uploadStage;
+  String? _uploadError;
+  DateTime? _lastPostedAt;
 
   final List<String> _categories = [
     'General',
@@ -58,51 +62,144 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
     super.dispose();
   }
 
-  Future<void> _pickMedia(String type) async {
+  void _showMediaSourcePicker(String type) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                type == 'photo' ? 'Select Photo Source' : 'Select Video Source',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const Icon(Icons.camera_alt, color: Colors.black87),
+                title: const Text('Camera'),
+                subtitle: Text(type == 'photo' ? 'Take a photo' : 'Record a video'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickMedia(type, ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library, color: Colors.black87),
+                title: const Text('Gallery'),
+                subtitle: Text(type == 'photo' ? 'Choose from gallery' : 'Choose from gallery'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickMedia(type, ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickMedia(String type, ImageSource source) async {
     final picker = ImagePicker();
-    XFile? file;
 
     if (type == 'photo') {
-      file = await picker.pickImage(source: ImageSource.gallery);
+      // Gallery → allow selecting many photos at once. Camera → single shot
+      // appended to the existing selection.
+      if (source == ImageSource.gallery) {
+        final files = await picker.pickMultiImage();
+        if (files.isNotEmpty) {
+          setState(() {
+            _photoFiles.addAll(files);
+            _type = 'photo';
+            _mediaFile = null;
+            _videoController?.dispose();
+            _videoController = null;
+          });
+        }
+      } else {
+        final file = await picker.pickImage(source: source);
+        if (file != null) {
+          setState(() {
+            _photoFiles.add(file);
+            _type = 'photo';
+            _mediaFile = null;
+            _videoController?.dispose();
+            _videoController = null;
+          });
+        }
+      }
     } else if (type == 'video') {
-      file = await picker.pickVideo(source: ImageSource.gallery);
-    }
-
-    if (file != null) {
-      if (type == 'video') {
+      final file = await picker.pickVideo(source: source);
+      if (file != null) {
         _videoController?.dispose();
         _videoController = VideoPlayerController.file(File(file.path))
           ..initialize().then((_) {
             setState(() {});
           });
+        setState(() {
+          _mediaFile = file;
+          _photoFiles.clear();
+          _type = 'video';
+        });
       }
-      
-      setState(() {
-        _mediaFile = file;
-        _type = type;
-      });
     }
+  }
+
+  void _removePhotoAt(int index) {
+    setState(() {
+      _photoFiles.removeAt(index);
+      if (_photoFiles.isEmpty) _type = 'message';
+    });
   }
 
   void _clearMedia() {
     setState(() {
       _mediaFile = null;
+      _photoFiles.clear();
       _videoController?.dispose();
       _videoController = null;
       _type = 'message';
     });
   }
 
+  Future<void> _validateFileSize(String path, {required bool isVideo}) async {
+    final bytes = await File(path).length();
+    final maxBytes = isVideo ? 200 * 1024 * 1024 : 15 * 1024 * 1024;
+    if (bytes > maxBytes) {
+      throw Exception(
+        isVideo
+            ? 'Video is too large. Select a file under 200 MB.'
+            : 'Photo is too large. Select an image under 15 MB.',
+      );
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    if ((_type == 'photo' || _type == 'video') && _mediaFile == null) {
+    if (_isPosting) return;
+    if (_type == 'photo' && _photoFiles.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a file')),
+        const SnackBar(content: Text('Please select at least one photo')),
+      );
+      return;
+    }
+    if (_type == 'video' && _mediaFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a video')),
       );
       return;
     }
 
-    setState(() => _isPosting = true);
+    setState(() {
+      _isPosting = true;
+      _uploadError = null;
+      _uploadStage = 'Validating update';
+    });
 
     try {
       final repo = ref.read(projectRepositoryProvider);
@@ -111,14 +208,31 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
       final storage = ref.read(storageDatasourceProvider);
 
       List<String> mediaUrls = [];
+      final path = 'projects/${widget.projectId}/updates';
 
       // Upload Media if present
-      if (_mediaFile != null) {
-        final path = 'projects/${widget.projectId}/updates';
-        final url = await storage.uploadFile(_mediaFile!.path, path);
-        mediaUrls.add(url);
+      if (_type == 'photo' && _photoFiles.isNotEmpty) {
+        setState(() => _uploadStage = 'Preparing photos');
+        // Compress each photo before upload to prevent OOM/timeout.
+        final compressedPaths = <String>[];
+        for (final f in _photoFiles) {
+          await _validateFileSize(f.path, isVideo: false);
+          compressedPaths.add(
+              await MediaCompressionService.compressImage(f.path));
+        }
+        setState(() =>
+            _uploadStage = 'Uploading ${compressedPaths.length} photo(s)');
+        mediaUrls = await storage.uploadMultipleFiles(compressedPaths, path);
+      } else if (_type == 'video' && _mediaFile != null) {
+        setState(() => _uploadStage = 'Preparing video');
+        await _validateFileSize(_mediaFile!.path, isVideo: true);
+        final compressed =
+            await MediaCompressionService.compressVideo(_mediaFile!.path);
+        setState(() => _uploadStage = 'Uploading video');
+        mediaUrls.add(await storage.uploadFile(compressed, path));
       }
 
+      setState(() => _uploadStage = 'Saving update');
       final update = ProjectUpdateEntity(
         id: '',
         postedBy: meta['name'] ?? 'Unknown',
@@ -134,6 +248,24 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
 
       await repo.addUpdate(widget.projectId, update);
 
+      // ─── Notification trigger ─────────────────────────────
+      try {
+        setState(() => _uploadStage = 'Sending notifications');
+        final ns = ref.read(notificationServiceProvider);
+        // Fetch project to get managerIds
+        final project = await repo.getProjectById(widget.projectId)
+            .then((r) => r.fold((_) => null, (p) => p));
+        await ns.dispatchUpdateNotification(
+          senderRole: role,
+          senderId: meta['id'] as String? ?? '',
+          senderName: meta['name'] as String? ?? 'Unknown',
+          projectId: widget.projectId,
+          projectName: project?.projectName ?? '',
+          managerIds: project?.managerIds ?? [],
+        );
+      } catch (_) {}
+      // ─────────────────────────────────────────────────────
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Update posted successfully!')),
@@ -145,11 +277,16 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
           _selectedCategory = null;
           _selectedRoomId = null;
           _selectedWorkerIds.clear();
+          _uploadStage = null;
+          _lastPostedAt = DateTime.now();
         });
-        // Close if implemented as bottom sheet, or just reset state
       }
     } catch (e) {
       if (mounted) {
+        setState(() {
+          _uploadError = e.toString();
+          _uploadStage = null;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e')),
         );
@@ -175,10 +312,10 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.withOpacity(0.2)),
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -190,6 +327,27 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (_uploadStage != null || _uploadError != null || _lastPostedAt != null)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: _uploadError != null
+                        ? Theme.of(context)
+                            .colorScheme
+                            .errorContainer
+                            .withValues(alpha: 0.6)
+                        : Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    _uploadError ??
+                        _uploadStage ??
+                        'Last update posted at ${TimeOfDay.fromDateTime(_lastPostedAt!).format(context)}',
+                  ),
+                ),
               // ─── Input Type Toggle ────────────────────────
               SegmentedButton<String>(
                 segments: const [
@@ -213,20 +371,76 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
                 onSelectionChanged: (Set<String> newSelection) {
                   final type = newSelection.first;
                   if (type != 'message') {
-                    _pickMedia(type);
+                    _showMediaSourcePicker(type);
                   } else {
                     _clearMedia();
                   }
                 },
-                style: ButtonStyle(
+                style: const ButtonStyle(
                   visualDensity: VisualDensity.compact,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
               ),
               const SizedBox(height: 16),
   
-              // ─── Media Preview ────────────────────────────
-              if (_mediaFile != null)
+              // ─── Photo Preview (multiple) ─────────────────
+              if (_photoFiles.isNotEmpty) ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '${_photoFiles.length} photo(s) selected',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => _showMediaSourcePicker('photo'),
+                      icon: const Icon(Icons.add_a_photo, size: 18),
+                      label: const Text('Add more'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 100,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _photoFiles.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, index) {
+                      return Stack(
+                        alignment: Alignment.topRight,
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.file(
+                              File(_photoFiles[index].path),
+                              width: 100,
+                              height: 100,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                          InkWell(
+                            onTap: () => _removePhotoAt(index),
+                            child: Container(
+                              margin: const EdgeInsets.all(2),
+                              decoration: const BoxDecoration(
+                                color: Colors.black54,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.close,
+                                  color: Colors.white, size: 18),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              // ─── Video Preview (single) ───────────────────
+              if (_type == 'video' && _mediaFile != null) ...[
                 Stack(
                   alignment: Alignment.topRight,
                   children: [
@@ -236,19 +450,15 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
                       decoration: BoxDecoration(
                         color: Colors.black,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                        border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
                       ),
-                      child: _type == 'photo'
-                          ? Image.file(
-                              File(_mediaFile!.path),
-                              fit: BoxFit.contain,
+                      child: _videoController != null &&
+                              _videoController!.value.isInitialized
+                          ? AspectRatio(
+                              aspectRatio: _videoController!.value.aspectRatio,
+                              child: VideoPlayer(_videoController!),
                             )
-                          : _videoController != null && _videoController!.value.isInitialized
-                              ? AspectRatio(
-                                  aspectRatio: _videoController!.value.aspectRatio,
-                                  child: VideoPlayer(_videoController!),
-                                )
-                              : const Center(child: CircularProgressIndicator()),
+                          : const Center(child: CircularProgressIndicator()),
                     ),
                     IconButton(
                       icon: const Icon(Icons.close, color: Colors.white),
@@ -257,7 +467,8 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
                     ),
                   ],
                 ),
-              if (_mediaFile != null) const SizedBox(height: 16),
+                const SizedBox(height: 16),
+              ],
   
               // ─── Content ──────────────────────────────────
               TextFormField(

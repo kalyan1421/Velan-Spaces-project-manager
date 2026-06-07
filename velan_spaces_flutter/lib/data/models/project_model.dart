@@ -4,6 +4,7 @@ import 'package:velan_spaces_flutter/domain/entities/project_entity.dart';
 class ProjectModel extends ProjectEntity {
   const ProjectModel({
     required super.id,
+    required super.projectCode,
     required super.projectName,
     required super.clientName,
     required super.location,
@@ -11,6 +12,7 @@ class ProjectModel extends ProjectEntity {
     required super.currentSpend,
     required super.isComplete,
     required super.managerIds,
+    super.budgetAccessManagerIds,
     super.estimatedCost,
     super.completionPercentage,
     super.startDate,
@@ -25,6 +27,7 @@ class ProjectModel extends ProjectEntity {
     final data = snap.data() as Map<String, dynamic>;
     return ProjectModel(
       id: snap.id,
+      projectCode: data['projectCode'] ?? snap.id,
       projectName: data['projectName'] ?? '',
       clientName: data['clientName'] ?? '',
       clientPhone: data['clientPhone'] ?? '',
@@ -36,6 +39,7 @@ class ProjectModel extends ProjectEntity {
       completionPercentage: (data['completionPercentage'] as num?)?.toInt() ?? 0,
       isComplete: data['isComplete'] ?? false,
       managerIds: (data['managerIds'] as List?)?.map((e) => e.toString()).toList() ?? [],
+      budgetAccessManagerIds: (data['budgetAccessManagerIds'] as List?)?.map((e) => e.toString()).toList() ?? [],
       workerIds: (data['workerIds'] as List?)?.map((e) => e.toString()).toList() ?? [],
       startDate: (data['startDate'] as Timestamp?)?.toDate(),
       targetEndDate: (data['targetEndDate'] as Timestamp?)?.toDate(),
@@ -45,6 +49,7 @@ class ProjectModel extends ProjectEntity {
 
   Map<String, dynamic> toJson() {
     return {
+      'projectCode': projectCode,
       'projectName': projectName,
       'clientName': clientName,
       'clientPhone': clientPhone,
@@ -56,6 +61,7 @@ class ProjectModel extends ProjectEntity {
       'completionPercentage': completionPercentage,
       'isComplete': isComplete,
       'managerIds': managerIds,
+      'budgetAccessManagerIds': budgetAccessManagerIds,
       'workerIds': workerIds,
       if (startDate != null) 'startDate': Timestamp.fromDate(startDate!),
       if (targetEndDate != null) 'targetEndDate': Timestamp.fromDate(targetEndDate!),

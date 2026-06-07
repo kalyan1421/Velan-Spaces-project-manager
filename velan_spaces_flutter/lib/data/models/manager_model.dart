@@ -7,6 +7,8 @@ class ManagerModel extends ManagerEntity {
     required super.name,
     super.phone,
     super.email,
+    super.password,
+    super.isSuspended,
     super.assignedProjects,
   });
 
@@ -17,6 +19,8 @@ class ManagerModel extends ManagerEntity {
       name: data['name'] ?? '',
       phone: data['phone'] ?? '',
       email: data['email'] ?? '',
+      password: data['password'] ?? '',
+      isSuspended: data['isSuspended'] ?? false,
       assignedProjects: List<String>.from(data['assignedProjects'] ?? []),
     );
   }
@@ -26,6 +30,8 @@ class ManagerModel extends ManagerEntity {
       'name': name,
       'phone': phone,
       'email': email,
+      'password': password,
+      'isSuspended': isSuspended,
       'assignedProjects': assignedProjects,
     };
   }
