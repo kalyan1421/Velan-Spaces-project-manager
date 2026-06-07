@@ -17,6 +17,9 @@ import 'package:velan_spaces_flutter/presentation/screens/notifications_screen.d
 import 'package:velan_spaces_flutter/presentation/screens/project/create_project_screen.dart';
 import 'package:velan_spaces_flutter/presentation/screens/project/edit_project_screen.dart';
 import 'package:velan_spaces_flutter/presentation/screens/project/project_support_screen.dart';
+import 'package:velan_spaces_flutter/presentation/screens/quotation/quotation_settings_screen.dart';
+import 'package:velan_spaces_flutter/presentation/screens/quotation/catalog_screen.dart';
+import 'package:velan_spaces_flutter/presentation/screens/quotation/quote_list_screen.dart';
 import 'package:velan_spaces_flutter/presentation/widgets/shells/admin_shell.dart';
 import 'package:velan_spaces_flutter/presentation/widgets/shells/manager_shell.dart';
 
@@ -93,6 +96,26 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/notifications',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const NotificationsScreen(),
+      ),
+
+      // ── Quotation (admin settings + rate card, per-lead quotes) ──────
+      GoRoute(
+        path: '/quotation-settings',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const QuotationSettingsScreen(),
+      ),
+      GoRoute(
+        path: '/catalog',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const CatalogScreen(),
+      ),
+      GoRoute(
+        path: '/lead/:leadId/quotes',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => QuoteListScreen(
+          leadId: state.pathParameters['leadId']!,
+          leadName: state.uri.queryParameters['name'] ?? '',
+        ),
       ),
 
       // ── Admin Shell (head role) — 5 tabs ────────────────────────────

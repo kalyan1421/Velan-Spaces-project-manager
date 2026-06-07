@@ -76,6 +76,28 @@ class ProfileScreen extends ConsumerWidget {
 
           const SizedBox(height: 8),
 
+          // ── Quotation admin (head only) ───────────────────────────
+          if (role == UserRole.head) ...[
+            Container(
+              color: Colors.white,
+              child: Column(
+                children: [
+                  _ProfileTile(
+                    icon: Icons.request_quote_outlined,
+                    label: 'Rate Card',
+                    onTap: () => context.push('/catalog'),
+                  ),
+                  _ProfileTile(
+                    icon: Icons.tune,
+                    label: 'Quotation Settings',
+                    onTap: () => context.push('/quotation-settings'),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+
           // ── Settings list ─────────────────────────────────────────
           Container(
             color: Colors.white,
