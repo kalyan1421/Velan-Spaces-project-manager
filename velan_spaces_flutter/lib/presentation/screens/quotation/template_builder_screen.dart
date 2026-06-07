@@ -329,8 +329,8 @@ class _TemplateLineSheetState extends State<_TemplateLineSheet> {
   @override
   Widget build(BuildContext context) {
     final basis = _item?.pricingBasis;
-    return ListView(
-      padding: const EdgeInsets.all(16),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         DropdownButtonFormField<CatalogItemEntity>(
           initialValue: _item,
