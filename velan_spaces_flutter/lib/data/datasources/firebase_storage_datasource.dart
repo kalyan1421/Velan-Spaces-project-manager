@@ -44,6 +44,18 @@ class FirebaseStorageDatasourceImpl implements StorageDatasource {
   }
 
   @override
+  Future<List<String>> uploadMultipleFiles(
+      List<String> filePaths, String folder) async {
+    // Upload sequentially to keep memory/bandwidth predictable on mobile and
+    // preserve the original order of the selected files.
+    final urls = <String>[];
+    for (final path in filePaths) {
+      urls.add(await uploadFile(path, folder));
+    }
+    return urls;
+  }
+
+  @override
   Future<void> deleteFile(String url) async {
     try {
       final ref = _storage.refFromURL(url);
