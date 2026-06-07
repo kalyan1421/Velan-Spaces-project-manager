@@ -130,6 +130,41 @@ class _QuoteCard extends ConsumerWidget {
         _ => Colors.grey,
       };
 
+  void _changeStatus(BuildContext context, WidgetRef ref) {
+    const statuses = ['draft', 'sent', 'accepted', 'rejected'];
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text('Set status',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            ),
+            ...statuses.map((s) => ListTile(
+                  title: Text(s[0].toUpperCase() + s.substring(1)),
+                  trailing: quote.status == s
+                      ? const Icon(Icons.check, color: Color(0xFF22C55E))
+                      : null,
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    await ref
+                        .read(quotationControllerProvider.notifier)
+                        .updateQuote(quote.copyWith(status: s));
+                  },
+                )),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Card(
@@ -178,6 +213,7 @@ class _QuoteCard extends ConsumerWidget {
                 style: const TextStyle(fontWeight: FontWeight.bold)),
             PopupMenuButton<String>(
               onSelected: (v) async {
+                final ctrl = ref.read(quotationControllerProvider.notifier);
                 if (v == 'pdf') {
                   Navigator.push(
                     context,
@@ -185,20 +221,29 @@ class _QuoteCard extends ConsumerWidget {
                       builder: (_) => QuotePreviewScreen(quote: quote),
                     ),
                   );
+                } else if (v == 'status') {
+                  _changeStatus(context, ref);
+                } else if (v == 'duplicate') {
+                  final settings =
+                      ref.read(quotationSettingsProvider).valueOrNull;
+                  final number = await ctrl.nextQuoteNumber(
+                      settings?.quoteNumberPrefix ?? 'QUO-', DateTime.now().year);
+                  await ctrl.createQuote(quote.copyWith(
+                      id: '', quoteNumber: number, status: 'draft'));
                 } else if (v == 'delete') {
                   final ok = await showConfirmBottomSheet(context,
                       title: 'Delete quote?',
                       message: 'This cannot be undone.',
                       confirmLabel: 'Delete');
                   if (ok == true) {
-                    await ref
-                        .read(quotationControllerProvider.notifier)
-                        .deleteQuote(quote.leadId, quote.id);
+                    await ctrl.deleteQuote(quote.leadId, quote.id);
                   }
                 }
               },
               itemBuilder: (_) => const [
                 PopupMenuItem(value: 'pdf', child: Text('Generate PDF')),
+                PopupMenuItem(value: 'status', child: Text('Change Status')),
+                PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
                 PopupMenuItem(value: 'delete', child: Text('Delete')),
               ],
             ),
