@@ -1,0 +1,83 @@
+name: Build & Deploy to Firebase Hosting
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  # ── Build + Deploy to live channel on push to main ─────────────────────
+  deploy_live:
+    name: Deploy to Firebase (live)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        working-directory: velan_spaces_flutter
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: velan_spaces_flutter
+        run: flutter analyze --no-fatal-infos
+
+      - name: Build web (release)
+        working-directory: velan_spaces_flutter
+        run: flutter build web --release --web-renderer canvaskit
+
+      - name: Deploy to Firebase Hosting (live)
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_VELAN_SPACES_CONSTRUCTIONS }}
+          projectId: velan-spaces-constructions
+          channelId: live
+          entryPoint: ./velan_spaces_flutter
+
+  # ── Build + Deploy preview channel on pull requests ────────────────────
+  deploy_preview:
+    name: Deploy preview (PR)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        working-directory: velan_spaces_flutter
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: velan_spaces_flutter
+        run: flutter analyze --no-fatal-infos
+
+      - name: Build web (release)
+        working-directory: velan_spaces_flutter
+        run: flutter build web --release --web-renderer canvaskit
+
+      - name: Deploy to Firebase Hosting (preview channel)
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_VELAN_SPACES_CONSTRUCTIONS }}
+          projectId: velan-spaces-constructions
+          entryPoint: ./velan_spaces_flutter
