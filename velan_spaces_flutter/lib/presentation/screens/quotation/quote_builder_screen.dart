@@ -191,6 +191,14 @@ class _QuoteBuilderScreenState extends ConsumerState<QuoteBuilderScreen> {
     var number = _quoteNumber;
     if (number.isEmpty) {
       number = await ctrl.nextQuoteNumber(settings.quoteNumberPrefix, _date.year);
+      if (number.isEmpty) {
+        if (!mounted) return;
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to generate quote number')),
+        );
+        return;
+      }
     }
 
     var quote = QuoteEntity(

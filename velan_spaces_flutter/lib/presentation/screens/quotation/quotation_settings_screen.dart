@@ -29,6 +29,7 @@ class _QuotationSettingsScreenState
   final _prefix = TextEditingController(text: 'QUO-');
   final _projectType = TextEditingController(text: 'Residential');
   final _gst = TextEditingController(text: '0');
+  final _notIncludedInput = TextEditingController();
 
   String _logoUrl = '';
   String _watermarkUrl = '';
@@ -44,7 +45,7 @@ class _QuotationSettingsScreenState
   void dispose() {
     for (final c in [
       _company, _phone, _email, _address, _footer, _terms,
-      _validity, _prefix, _projectType, _gst,
+      _validity, _prefix, _projectType, _gst, _notIncludedInput,
     ]) {
       c.dispose();
     }
@@ -117,9 +118,11 @@ class _QuotationSettingsScreenState
         await ref.read(quotationControllerProvider.notifier).saveSettings(settings);
     if (!mounted) return;
     setState(() => _saving = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(ok ? 'Settings saved' : 'Failed to save')),
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ok ? 'Settings saved' : 'Failed to save')),
+      );
+    }
   }
 
   @override
@@ -287,7 +290,6 @@ class _QuotationSettingsScreenState
   }
 
   Widget _notIncludedEditor() {
-    final controller = TextEditingController();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -306,7 +308,7 @@ class _QuotationSettingsScreenState
           children: [
             Expanded(
               child: TextField(
-                controller: controller,
+                controller: _notIncludedInput,
                 decoration: const InputDecoration(
                   hintText: 'Add an item, e.g. "Loose Furniture"',
                   border: OutlineInputBorder(),
@@ -315,7 +317,7 @@ class _QuotationSettingsScreenState
                 onSubmitted: (v) {
                   if (v.trim().isNotEmpty) {
                     setState(() => _notIncluded.add(v.trim()));
-                    controller.clear();
+                    _notIncludedInput.clear();
                   }
                 },
               ),
@@ -323,9 +325,9 @@ class _QuotationSettingsScreenState
             IconButton(
               icon: const Icon(Icons.add_circle),
               onPressed: () {
-                if (controller.text.trim().isNotEmpty) {
-                  setState(() => _notIncluded.add(controller.text.trim()));
-                  controller.clear();
+                if (_notIncludedInput.text.trim().isNotEmpty) {
+                  setState(() => _notIncluded.add(_notIncludedInput.text.trim()));
+                  _notIncludedInput.clear();
                 }
               },
             ),

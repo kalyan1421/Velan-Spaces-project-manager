@@ -302,8 +302,16 @@ class _QuoteCard extends ConsumerWidget {
                       ref.read(quotationSettingsProvider).valueOrNull;
                   final number = await ctrl.nextQuoteNumber(
                       settings?.quoteNumberPrefix ?? 'QUO-', DateTime.now().year);
-                  await ctrl.createQuote(quote.copyWith(
-                      id: '', quoteNumber: number, status: 'draft'));
+                  if (number.isEmpty) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Failed to generate quote number')),
+                      );
+                    }
+                  } else {
+                    await ctrl.createQuote(quote.copyWith(
+                        id: '', quoteNumber: number, status: 'draft'));
+                  }
                 } else if (v == 'delete') {
                   final ok = await showConfirmBottomSheet(context,
                       title: 'Delete quote?',

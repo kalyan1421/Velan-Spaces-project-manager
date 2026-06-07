@@ -62,8 +62,10 @@ class FirebaseStorageDatasourceImpl implements StorageDatasource {
     String fileName, {
     String contentType = 'application/octet-stream',
   }) async {
+    // Sanitize fileName to prevent path traversal / injection
+    final safeName = fileName.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final ref = _storage.ref().child('$folder/${timestamp}_$fileName');
+    final ref = _storage.ref().child('$folder/${timestamp}_$safeName');
     final metadata = SettableMetadata(
       contentType: contentType,
       customMetadata: {'uploadedAt': DateTime.now().toIso8601String()},

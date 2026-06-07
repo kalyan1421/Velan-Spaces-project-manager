@@ -132,9 +132,14 @@ class _CatalogTile extends ConsumerWidget {
                   message: 'This removes it from the rate card.',
                   confirmLabel: 'Delete');
               if (ok == true) {
-                await ref
+                final deleted = await ref
                     .read(quotationControllerProvider.notifier)
                     .deleteCatalogItem(item.id);
+                if (!deleted && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Failed to delete item')),
+                  );
+                }
               }
             }
           },
@@ -267,10 +272,10 @@ class _CatalogEditorState extends ConsumerState<_CatalogEditor> {
         ? await ctrl.addCatalogItem(entity)
         : await ctrl.updateCatalogItem(entity);
     if (!mounted) return;
-    setState(() => _saving = false);
     if (ok) {
       Navigator.pop(context);
     } else {
+      setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Failed to save')),
       );
@@ -430,7 +435,7 @@ class _VariantRow {
       _VariantRow(TextEditingController(), TextEditingController());
   factory _VariantRow.from(CatalogVariant v) => _VariantRow(
         TextEditingController(text: v.label),
-        TextEditingController(text: v.rate.toStringAsFixed(0)),
+        TextEditingController(text: v.rate.toString()),
       );
   final TextEditingController label;
   final TextEditingController rate;

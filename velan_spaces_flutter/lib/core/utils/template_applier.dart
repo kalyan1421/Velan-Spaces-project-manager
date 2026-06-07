@@ -57,6 +57,7 @@ class TemplateApplier {
         items.add(QuoteItem(
           catalogItemId: line.catalogItemId,
           name: name,
+          description: catalogItem?.description ?? '',
           itemType: itemType,
           variantLabel: variantLabel,
           lengthMm: line.defaultLengthMm,

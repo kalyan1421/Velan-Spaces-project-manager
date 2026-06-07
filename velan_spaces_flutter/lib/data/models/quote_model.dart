@@ -77,7 +77,7 @@ class QuoteModel extends QuoteEntity {
       );
 
   factory QuoteModel.fromSnapshot(DocumentSnapshot snap) {
-    final data = snap.data() as Map<String, dynamic>;
+    final data = snap.data() as Map<String, dynamic>? ?? {};
     return QuoteModel(
       id: snap.id,
       leadId: data['leadId'] ?? '',

@@ -47,7 +47,7 @@ both editable/zeroable per quote.)
 ## 2. Data model (Firestore)
 
 ### A. Admin defaults — `orgSettings/quotation` (single doc)
-```
+```text
 companyName, phone, email, address · logoUrl · watermarkLogoUrl · coverImageUrl · footerText
 defaultTerms · defaultNotIncluded: List<String>
 quoteValidityDays · quoteNumberPrefix · defaultProjectType
@@ -55,7 +55,7 @@ defaultGstPercent · roundAmounts: bool
 ```
 
 ### B. Rate card / catalog — `catalogItems/{id}` (admin-maintained)
-```
+```text
 name, description
 itemType: component | accessory | service
 pricingBasis: area | qty | uom
@@ -67,13 +67,13 @@ active: bool
 ```
 
 ### C. Templates — `quoteTemplates/{id}` (admin-maintained)
-```
+```text
 name: "Standard 3BHK"
 sections: List<{ title, type, lines: List<{ catalogItemId, variantLabel, defaultL, defaultH | defaultQty }> }>
 ```
 
 ### D. Per-quote — `leads/{leadId}/quotes/{quoteId}`
-```
+```text
 quoteNumber · status: draft|sent|accepted|rejected
 preparedFor {name,phone,address} · handledBy · designedBy
 date · validUntil · enquiryDate · enquiryNo · siteLocation · projectType

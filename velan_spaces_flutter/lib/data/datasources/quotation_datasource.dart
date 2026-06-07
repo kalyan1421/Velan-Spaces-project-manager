@@ -140,6 +140,6 @@ class QuotationDatasource {
       txn.set(counterRef, {'seq': next}, SetOptions(merge: true));
       return next;
     });
-    return '$prefix$year-${seq.toString().padLeft(3, '0')}';
+    return '$prefix$year-${seq.toString().padLeft(4, '0')}';
   }
 }

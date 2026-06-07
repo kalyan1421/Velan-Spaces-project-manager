@@ -111,9 +111,11 @@ class _TemplateBuilderScreenState extends ConsumerState<TemplateBuilderScreen> {
     if (ok) {
       Navigator.pop(context);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to save template')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to save template')),
+        );
+      }
     }
   }
 
@@ -264,7 +266,7 @@ class _SectionSheetState extends State<_SectionSheet> {
           DropdownButtonFormField<CatalogItemType>(
             initialValue: _type,
             decoration: const InputDecoration(
-                labelText: 'Table type', border: OutlineInputBorder(), isDense: true),
+                labelText: 'Item type', border: OutlineInputBorder(), isDense: true),
             items: CatalogItemType.values
                 .map((t) => DropdownMenuItem(value: t, child: Text(t.label)))
                 .toList(),

@@ -110,8 +110,10 @@ class QuotationController extends StateNotifier<AsyncValue<void>> {
   }
 
   Future<bool> deleteCatalogItem(String id) async {
+    state = const AsyncValue.loading();
     try {
       await _ds.deleteCatalogItem(id);
+      state = const AsyncValue.data(null);
       return true;
     } catch (e, st) {
       state = AsyncValue.error(e, st);
@@ -145,8 +147,10 @@ class QuotationController extends StateNotifier<AsyncValue<void>> {
   }
 
   Future<bool> deleteTemplate(String id) async {
+    state = const AsyncValue.loading();
     try {
       await _ds.deleteTemplate(id);
+      state = const AsyncValue.data(null);
       return true;
     } catch (e, st) {
       state = AsyncValue.error(e, st);
@@ -181,8 +185,10 @@ class QuotationController extends StateNotifier<AsyncValue<void>> {
   }
 
   Future<bool> deleteQuote(String leadId, String quoteId) async {
+    state = const AsyncValue.loading();
     try {
       await _ds.deleteQuote(leadId, quoteId);
+      state = const AsyncValue.data(null);
       return true;
     } catch (e, st) {
       state = AsyncValue.error(e, st);

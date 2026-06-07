@@ -14,7 +14,7 @@ class CatalogItemModel extends CatalogItemEntity {
   });
 
   factory CatalogItemModel.fromSnapshot(DocumentSnapshot snap) {
-    final data = snap.data() as Map<String, dynamic>;
+    final data = snap.data() as Map<String, dynamic>? ?? {};
     return CatalogItemModel(
       id: snap.id,
       name: data['name'] ?? '',

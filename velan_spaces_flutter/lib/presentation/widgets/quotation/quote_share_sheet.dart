@@ -149,7 +149,10 @@ Future<void> showQuoteShareSheet(
 
 void _openWhatsApp(BuildContext context, String phone, String message) async {
   var digits = phone.replaceAll(RegExp(r'[^0-9]'), '');
-  if (digits.length == 10) digits = '91$digits'; // default to India code
+  // Only prepend India code if there's no explicit country code prefix
+  if (digits.length == 10 && !phone.trim().startsWith('+')) {
+    digits = '91$digits'; // default to India (+91)
+  }
   final uri =
       Uri.parse('https://wa.me/$digits?text=${Uri.encodeComponent(message)}');
   final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);

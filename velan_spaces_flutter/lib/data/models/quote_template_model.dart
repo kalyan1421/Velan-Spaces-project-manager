@@ -48,7 +48,7 @@ class QuoteTemplateModel extends QuoteTemplateEntity {
       );
 
   factory QuoteTemplateModel.fromSnapshot(DocumentSnapshot snap) {
-    final data = snap.data() as Map<String, dynamic>;
+    final data = snap.data() as Map<String, dynamic>? ?? {};
     return QuoteTemplateModel(
       id: snap.id,
       name: data['name'] ?? '',

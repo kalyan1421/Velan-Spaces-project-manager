@@ -78,9 +78,14 @@ class _TemplateCard extends ConsumerWidget {
                   message: 'This cannot be undone.',
                   confirmLabel: 'Delete');
               if (ok == true) {
-                await ref
+                final deleted = await ref
                     .read(quotationControllerProvider.notifier)
                     .deleteTemplate(template.id);
+                if (!deleted && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Failed to delete template')),
+                  );
+                }
               }
             }
           },
