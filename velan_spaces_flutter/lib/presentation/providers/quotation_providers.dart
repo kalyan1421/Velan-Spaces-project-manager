@@ -9,6 +9,7 @@ import 'package:velan_spaces_flutter/data/models/quotation_settings_model.dart';
 import 'package:velan_spaces_flutter/data/models/quote_model.dart';
 import 'package:velan_spaces_flutter/data/models/quote_template_model.dart';
 import 'package:velan_spaces_flutter/domain/entities/catalog_item_entity.dart';
+import 'package:velan_spaces_flutter/domain/entities/design_document_entity.dart';
 import 'package:velan_spaces_flutter/domain/entities/quotation_settings_entity.dart';
 import 'package:velan_spaces_flutter/domain/entities/quote_entity.dart';
 import 'package:velan_spaces_flutter/domain/entities/quote_template_entity.dart';
@@ -191,6 +192,41 @@ class QuotationController extends StateNotifier<AsyncValue<void>> {
 
   Future<String> nextQuoteNumber(String prefix, int year) =>
       _ds.nextQuoteNumber(prefix, year);
+
+  /// Attaches the quote's PDF to [projectId] as a client-visible document (it
+  /// surfaces in the project's Designs tab, which clients can already open).
+  /// Generates+uploads the PDF first if one isn't hosted yet.
+  Future<bool> attachQuoteToProject(
+      QuoteEntity quote, String projectId, QuotationSettingsEntity settings) async {
+    state = const AsyncValue.loading();
+    try {
+      var url = quote.pdfUrl;
+      if (url.isEmpty) {
+        final bytes =
+            await QuotationPdfService.build(quote: quote, settings: settings);
+        final uploaded = await uploadPdfBytes(quote, bytes);
+        if (uploaded == null) throw Exception('Upload failed');
+        url = uploaded;
+      }
+      final repo = _ref.read(projectRepositoryProvider);
+      final design = DesignDocumentEntity(
+        id: '',
+        title: 'Quotation ${quote.quoteNumber}',
+        fileUrl: url,
+        type: 'Quotation',
+        approvalStatus: const DesignApprovalStatus(),
+        postedBy: _ref.read(currentUserMetaProvider)['name'] as String? ?? '',
+        timestamp: DateTime.now(),
+        projectId: projectId,
+      );
+      final res = await repo.addDesign(projectId, design);
+      state = const AsyncValue.data(null);
+      return res.fold((_) => false, (_) => true);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+      return false;
+    }
+  }
 
   /// Builds the quote PDF bytes (no upload). Useful for native share.
   Future<Uint8List> buildPdfBytes(

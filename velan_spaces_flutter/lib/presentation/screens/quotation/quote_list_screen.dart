@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:velan_spaces_flutter/core/utils/bottom_sheet_utils.dart';
 import 'package:velan_spaces_flutter/core/utils/format_utils.dart';
 import 'package:velan_spaces_flutter/core/utils/template_applier.dart';
+import 'package:velan_spaces_flutter/domain/entities/quotation_settings_entity.dart';
 import 'package:velan_spaces_flutter/domain/entities/quote_entity.dart';
 import 'package:velan_spaces_flutter/domain/entities/quote_template_entity.dart';
+import 'package:velan_spaces_flutter/presentation/providers/project_providers.dart';
 import 'package:velan_spaces_flutter/presentation/providers/quotation_providers.dart';
 import 'package:velan_spaces_flutter/presentation/screens/quotation/quote_builder_screen.dart';
 import 'package:velan_spaces_flutter/presentation/screens/quotation/quote_preview_screen.dart';
@@ -131,6 +133,67 @@ class _QuoteCard extends ConsumerWidget {
         _ => Colors.grey,
       };
 
+  void _attachToProject(BuildContext context, WidgetRef ref) {
+    final projects = ref.read(allProjectsProvider).valueOrNull ?? [];
+    if (projects.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No projects available to attach to')),
+      );
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text('Attach to which project?',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                children: projects
+                    .map((p) => ListTile(
+                          leading: const Icon(Icons.folder_outlined),
+                          title: Text(p.projectName),
+                          subtitle: Text(p.clientName),
+                          onTap: () async {
+                            Navigator.pop(ctx);
+                            final settings =
+                                ref.read(quotationSettingsProvider).valueOrNull ??
+                                    const QuotationSettingsEntity();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Attaching…')),
+                            );
+                            final ok = await ref
+                                .read(quotationControllerProvider.notifier)
+                                .attachQuoteToProject(quote, p.id, settings);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                    content: Text(ok
+                                        ? 'Attached — the client can download it from the project'
+                                        : 'Failed to attach')),
+                              );
+                            }
+                          },
+                        ))
+                    .toList(),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _changeStatus(BuildContext context, WidgetRef ref) {
     const statuses = ['draft', 'sent', 'accepted', 'rejected'];
     showModalBottomSheet(
@@ -230,6 +293,8 @@ class _QuoteCard extends ConsumerWidget {
                   );
                 } else if (v == 'send') {
                   showQuoteShareSheet(context, ref, quote);
+                } else if (v == 'attach') {
+                  _attachToProject(context, ref);
                 } else if (v == 'status') {
                   _changeStatus(context, ref);
                 } else if (v == 'duplicate') {
@@ -252,6 +317,8 @@ class _QuoteCard extends ConsumerWidget {
               itemBuilder: (_) => const [
                 PopupMenuItem(value: 'pdf', child: Text('Preview PDF')),
                 PopupMenuItem(value: 'send', child: Text('Send to Client')),
+                PopupMenuItem(
+                    value: 'attach', child: Text('Attach to Project')),
                 PopupMenuItem(value: 'status', child: Text('Change Status')),
                 PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
                 PopupMenuItem(value: 'delete', child: Text('Delete')),
