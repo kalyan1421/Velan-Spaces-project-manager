@@ -88,6 +88,11 @@ class ProfileScreen extends ConsumerWidget {
                     onTap: () => context.push('/catalog'),
                   ),
                   _ProfileTile(
+                    icon: Icons.dashboard_customize_outlined,
+                    label: 'Quote Templates',
+                    onTap: () => context.push('/quote-templates'),
+                  ),
+                  _ProfileTile(
                     icon: Icons.tune,
                     label: 'Quotation Settings',
                     onTap: () => context.push('/quotation-settings'),

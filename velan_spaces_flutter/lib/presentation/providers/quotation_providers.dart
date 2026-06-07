@@ -4,9 +4,11 @@ import 'package:velan_spaces_flutter/data/datasources/quotation_datasource.dart'
 import 'package:velan_spaces_flutter/data/models/catalog_item_model.dart';
 import 'package:velan_spaces_flutter/data/models/quotation_settings_model.dart';
 import 'package:velan_spaces_flutter/data/models/quote_model.dart';
+import 'package:velan_spaces_flutter/data/models/quote_template_model.dart';
 import 'package:velan_spaces_flutter/domain/entities/catalog_item_entity.dart';
 import 'package:velan_spaces_flutter/domain/entities/quotation_settings_entity.dart';
 import 'package:velan_spaces_flutter/domain/entities/quote_entity.dart';
+import 'package:velan_spaces_flutter/domain/entities/quote_template_entity.dart';
 import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart';
 import 'package:velan_spaces_flutter/presentation/providers/project_providers.dart';
 
@@ -29,6 +31,11 @@ final catalogProvider = StreamProvider<List<CatalogItemEntity>>((ref) {
 /// Only active catalog items, used by the quote builder picker.
 final activeCatalogProvider = Provider<List<CatalogItemEntity>>((ref) {
   return ref.watch(catalogProvider).valueOrNull?.where((c) => c.active).toList() ?? [];
+});
+
+// ── Templates ───────────────────────────────────────────────────────────
+final quoteTemplatesProvider = StreamProvider<List<QuoteTemplateEntity>>((ref) {
+  return ref.watch(quotationDatasourceProvider).watchTemplates();
 });
 
 // ── Quotes per lead ─────────────────────────────────────────────────────
@@ -101,6 +108,41 @@ class QuotationController extends StateNotifier<AsyncValue<void>> {
   Future<bool> deleteCatalogItem(String id) async {
     try {
       await _ds.deleteCatalogItem(id);
+      return true;
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+      return false;
+    }
+  }
+
+  // Templates
+  Future<bool> addTemplate(QuoteTemplateEntity t) async {
+    state = const AsyncValue.loading();
+    try {
+      await _ds.addTemplate(QuoteTemplateModel.fromEntity(t));
+      state = const AsyncValue.data(null);
+      return true;
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+      return false;
+    }
+  }
+
+  Future<bool> updateTemplate(QuoteTemplateEntity t) async {
+    state = const AsyncValue.loading();
+    try {
+      await _ds.updateTemplate(t.id, QuoteTemplateModel.fromEntity(t));
+      state = const AsyncValue.data(null);
+      return true;
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+      return false;
+    }
+  }
+
+  Future<bool> deleteTemplate(String id) async {
+    try {
+      await _ds.deleteTemplate(id);
       return true;
     } catch (e, st) {
       state = AsyncValue.error(e, st);

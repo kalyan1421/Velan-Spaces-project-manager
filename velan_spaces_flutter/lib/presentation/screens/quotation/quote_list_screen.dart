@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:velan_spaces_flutter/core/utils/bottom_sheet_utils.dart';
 import 'package:velan_spaces_flutter/core/utils/format_utils.dart';
+import 'package:velan_spaces_flutter/core/utils/template_applier.dart';
 import 'package:velan_spaces_flutter/domain/entities/quote_entity.dart';
+import 'package:velan_spaces_flutter/domain/entities/quote_template_entity.dart';
 import 'package:velan_spaces_flutter/presentation/providers/quotation_providers.dart';
 import 'package:velan_spaces_flutter/presentation/screens/quotation/quote_builder_screen.dart';
 import 'package:velan_spaces_flutter/presentation/screens/quotation/quote_preview_screen.dart';
@@ -24,12 +26,7 @@ class QuoteListScreen extends ConsumerWidget {
       ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'quote_list_fab',
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => QuoteBuilderScreen(leadId: leadId),
-          ),
-        ),
+        onPressed: () => _newQuote(context, ref),
         icon: const Icon(Icons.add),
         label: const Text('New Quote'),
       ),
@@ -54,6 +51,69 @@ class QuoteListScreen extends ConsumerWidget {
             itemBuilder: (_, i) => _QuoteCard(quote: quotes[i]),
           );
         },
+      ),
+    );
+  }
+
+  /// Offers a blank quote or a template to start from.
+  void _newQuote(BuildContext context, WidgetRef ref) {
+    final templates = ref.read(quoteTemplatesProvider).valueOrNull ?? [];
+    if (templates.isEmpty) {
+      _open(context, ref, null);
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text('Start a quote',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.note_add_outlined),
+              title: const Text('Blank quote'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _open(context, ref, null);
+              },
+            ),
+            const Divider(height: 1),
+            ...templates.map((t) => ListTile(
+                  leading: const Icon(Icons.dashboard_customize_outlined),
+                  title: Text(t.name),
+                  subtitle: Text('${t.lineCount} item(s) pre-filled'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _open(context, ref, t);
+                  },
+                )),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _open(BuildContext context, WidgetRef ref, QuoteTemplateEntity? template) {
+    List<QuoteSection>? sections;
+    if (template != null) {
+      final catalog = ref.read(activeCatalogProvider);
+      final round =
+          ref.read(quotationSettingsProvider).valueOrNull?.roundAmounts ?? true;
+      sections = TemplateApplier.apply(template, catalog, round: round);
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            QuoteBuilderScreen(leadId: leadId, initialSections: sections),
       ),
     );
   }

@@ -2,10 +2,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:velan_spaces_flutter/data/models/catalog_item_model.dart';
 import 'package:velan_spaces_flutter/data/models/quotation_settings_model.dart';
 import 'package:velan_spaces_flutter/data/models/quote_model.dart';
+import 'package:velan_spaces_flutter/data/models/quote_template_model.dart';
 
 const String _orgSettingsCollection = 'orgSettings';
 const String _quotationSettingsDoc = 'quotation';
 const String _catalogCollection = 'catalogItems';
+const String _templatesCollection = 'quoteTemplates';
 const String _leadsCollection = 'leads';
 const String _quotesSubcollection = 'quotes';
 
@@ -64,6 +66,32 @@ class QuotationDatasource {
 
   Future<void> deleteCatalogItem(String id) async {
     await _firestore.collection(_catalogCollection).doc(id).delete();
+  }
+
+  // ── Templates ─────────────────────────────────────────────────────────
+  Stream<List<QuoteTemplateModel>> watchTemplates() {
+    return _firestore
+        .collection(_templatesCollection)
+        .orderBy('name')
+        .snapshots()
+        .map((snap) =>
+            snap.docs.map((d) => QuoteTemplateModel.fromSnapshot(d)).toList());
+  }
+
+  Future<String> addTemplate(QuoteTemplateModel t) async {
+    final ref = await _firestore.collection(_templatesCollection).add({
+      ...t.toJson(),
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    return ref.id;
+  }
+
+  Future<void> updateTemplate(String id, QuoteTemplateModel t) async {
+    await _firestore.collection(_templatesCollection).doc(id).update(t.toJson());
+  }
+
+  Future<void> deleteTemplate(String id) async {
+    await _firestore.collection(_templatesCollection).doc(id).delete();
   }
 
   // ── Quotes (leads/{leadId}/quotes) ────────────────────────────────────

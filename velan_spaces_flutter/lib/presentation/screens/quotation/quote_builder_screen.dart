@@ -16,10 +16,18 @@ import 'package:velan_spaces_flutter/presentation/screens/quotation/quote_previe
 /// Builds or edits a quote. Amounts auto-calculate from the rate card as items
 /// are added; subtotal, discount, GST and grand total recompute live.
 class QuoteBuilderScreen extends ConsumerStatefulWidget {
-  const QuoteBuilderScreen({required this.leadId, this.existing, super.key});
+  const QuoteBuilderScreen({
+    required this.leadId,
+    this.existing,
+    this.initialSections,
+    super.key,
+  });
 
   final String leadId;
   final QuoteEntity? existing;
+
+  /// Pre-filled sections when starting a new quote from a template.
+  final List<QuoteSection>? initialSections;
 
   @override
   ConsumerState<QuoteBuilderScreen> createState() => _QuoteBuilderScreenState();
@@ -93,6 +101,7 @@ class _QuoteBuilderScreenState extends ConsumerState<QuoteBuilderScreen> {
       _gst.text = settings.defaultGstPercent.toStringAsFixed(0);
       _date = _today();
       _validUntil = _date.add(Duration(days: settings.quoteValidityDays));
+      _sections = widget.initialSections ?? [];
     }
     _round = settings.roundAmounts;
     _initialized = true;
