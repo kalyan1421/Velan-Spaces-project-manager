@@ -5,6 +5,7 @@ import 'package:velan_spaces_flutter/core/utils/format_utils.dart';
 import 'package:velan_spaces_flutter/domain/entities/quote_entity.dart';
 import 'package:velan_spaces_flutter/presentation/providers/quotation_providers.dart';
 import 'package:velan_spaces_flutter/presentation/screens/quotation/quote_builder_screen.dart';
+import 'package:velan_spaces_flutter/presentation/screens/quotation/quote_preview_screen.dart';
 
 /// Lists the quotations for a single lead/enquiry, with create / edit / delete.
 class QuoteListScreen extends ConsumerWidget {
@@ -117,7 +118,14 @@ class _QuoteCard extends ConsumerWidget {
                 style: const TextStyle(fontWeight: FontWeight.bold)),
             PopupMenuButton<String>(
               onSelected: (v) async {
-                if (v == 'delete') {
+                if (v == 'pdf') {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => QuotePreviewScreen(quote: quote),
+                    ),
+                  );
+                } else if (v == 'delete') {
                   final ok = await showConfirmBottomSheet(context,
                       title: 'Delete quote?',
                       message: 'This cannot be undone.',
@@ -130,6 +138,7 @@ class _QuoteCard extends ConsumerWidget {
                 }
               },
               itemBuilder: (_) => const [
+                PopupMenuItem(value: 'pdf', child: Text('Generate PDF')),
                 PopupMenuItem(value: 'delete', child: Text('Delete')),
               ],
             ),

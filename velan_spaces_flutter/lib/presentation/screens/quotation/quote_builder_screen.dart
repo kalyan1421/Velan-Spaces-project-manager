@@ -11,6 +11,7 @@ import 'package:velan_spaces_flutter/domain/entities/quote_entity.dart';
 import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart';
 import 'package:velan_spaces_flutter/presentation/providers/lead_providers.dart';
 import 'package:velan_spaces_flutter/presentation/providers/quotation_providers.dart';
+import 'package:velan_spaces_flutter/presentation/screens/quotation/quote_preview_screen.dart';
 
 /// Builds or edits a quote. Amounts auto-calculate from the rate card as items
 /// are added; subtotal, discount, GST and grand total recompute live.
@@ -224,6 +225,49 @@ class _QuoteBuilderScreenState extends ConsumerState<QuoteBuilderScreen> {
     }
   }
 
+  /// Assembles the current on-screen state into a quote (computed) for preview,
+  /// without persisting or burning a quote number.
+  QuoteEntity _currentQuote(QuotationSettingsEntity settings) {
+    final quote = QuoteEntity(
+      id: widget.existing?.id ?? '',
+      leadId: widget.leadId,
+      quoteNumber: _quoteNumber,
+      status: _status,
+      preparedForName: _name.text.trim(),
+      preparedForPhone: _phone.text.trim(),
+      preparedForAddress: _address.text.trim(),
+      handledBy: _handledBy.text.trim(),
+      designedBy: _designedBy.text.trim(),
+      date: _date,
+      validUntil: _validUntil,
+      enquiryDate: widget.existing?.enquiryDate ?? _date,
+      enquiryNo: _enquiryNo.text.trim(),
+      siteLocation: _siteLocation.text.trim(),
+      projectType: _projectType.text.trim(),
+      notIncluded: widget.existing?.notIncluded ?? settings.defaultNotIncluded,
+      sections: _sections,
+      discountType: _discountType,
+      discountValue: double.tryParse(_discount.text) ?? 0,
+      gstPercent: double.tryParse(_gst.text) ?? 0,
+    );
+    return QuoteCalculator.recomputeQuote(quote, round: _round);
+  }
+
+  void _preview(QuotationSettingsEntity settings) {
+    if (_sections.every((s) => s.items.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Add at least one item to preview')),
+      );
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => QuotePreviewScreen(quote: _currentQuote(settings)),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final settingsAsync = ref.watch(quotationSettingsProvider);
@@ -240,6 +284,13 @@ class _QuoteBuilderScreenState extends ConsumerState<QuoteBuilderScreen> {
         return Scaffold(
           appBar: AppBar(
             title: Text(_quoteNumber.isEmpty ? 'New Quote' : _quoteNumber),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.picture_as_pdf_outlined),
+                tooltip: 'Preview PDF',
+                onPressed: () => _preview(s),
+              ),
+            ],
           ),
           bottomNavigationBar: _buildTotalsBar(context, s),
           body: ListView(
