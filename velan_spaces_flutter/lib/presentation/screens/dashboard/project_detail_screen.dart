@@ -193,12 +193,19 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
                             ),
                         ],
                       ),
+                    // Clients have no shell/nav, so give them a way out.
+                    if (role == UserRole.client)
+                      IconButton(
+                        icon: const Icon(Icons.logout_outlined),
+                        tooltip: 'Sign out',
+                        onPressed: () => _confirmClientSignOut(context),
+                      ),
                   ],
 
                 ),
                 if (_showProgressOverview)
                   SliverToBoxAdapter(
-                    child: _buildProgressOverview(context, project),
+                    child: _buildProgressOverview(context, project, role),
                   ),
                 SliverPersistentHeader(
                   pinned: true,
@@ -226,6 +233,33 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
       error: (err, stack) => Scaffold(
         appBar: AppBar(title: const Text('Error')),
         body: Center(child: Text('Error: $err')),
+      ),
+    );
+  }
+
+  // ── Client sign-out ──────────────────────────────────────────────────────
+  void _confirmClientSignOut(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sign Out'),
+        content: const Text(
+            'Sign out and return to the login screen to open another project?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await ref.read(authNotifierProvider.notifier).signOut();
+              if (context.mounted) context.go('/login');
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Sign Out'),
+          ),
+        ],
       ),
     );
   }
@@ -389,10 +423,13 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
     );
   }
 
-  Widget _buildProgressOverview(BuildContext context, ProjectEntity project) {
+  Widget _buildProgressOverview(
+      BuildContext context, ProjectEntity project, UserRole role) {
     final spendRatio = project.budget > 0
         ? (project.currentSpend / project.budget).clamp(0.0, 1.0)
         : 0.0;
+    // Clients must not see any budget / financial figures.
+    final showBudget = role != UserRole.client;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -467,38 +504,40 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
                     ],
                   ),
                 ],
-                const SizedBox(height: 10),
-                // Budget bar
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Budget: ${FormatUtils.formatCurrency(project.currentSpend)} / ${FormatUtils.formatCurrency(project.budget)}',
-                          style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: spendRatio,
-                        minHeight: 5,
-                        backgroundColor: Colors.grey[200],
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          spendRatio > 0.9
-                              ? Colors.red
-                              : spendRatio > 0.7
-                                  ? Colors.orange
-                                  : const Color(0xFF22C55E),
+                if (showBudget) ...[
+                  const SizedBox(height: 10),
+                  // Budget bar
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Budget: ${FormatUtils.formatCurrency(project.currentSpend)} / ${FormatUtils.formatCurrency(project.budget)}',
+                            style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: spendRatio,
+                          minHeight: 5,
+                          backgroundColor: Colors.grey[200],
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            spendRatio > 0.9
+                                ? Colors.red
+                                : spendRatio > 0.7
+                                    ? Colors.orange
+                                    : const Color(0xFF22C55E),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

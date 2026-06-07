@@ -159,20 +159,58 @@ class HeadDashboardScreen extends ConsumerWidget {
                         ),
                       ),
                     ),
-                    Container(
-                      width: 12,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        color: project.isComplete ? const Color(0xFF22C55E) : const Color(0xFFFFB347),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                            BoxShadow(
-                                color: (project.isComplete ? const Color(0xFF22C55E) : const Color(0xFFFFB347)).withOpacity(0.3),
-                                blurRadius: 4,
-                                spreadRadius: 1,
-                            )
-                        ]
-                      ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 12,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: project.isComplete ? const Color(0xFF22C55E) : const Color(0xFFFFB347),
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                                BoxShadow(
+                                    color: (project.isComplete ? const Color(0xFF22C55E) : const Color(0xFFFFB347)).withOpacity(0.3),
+                                    blurRadius: 4,
+                                    spreadRadius: 1,
+                                )
+                            ]
+                          ),
+                        ),
+                        PopupMenuButton<String>(
+                          icon: Icon(Icons.more_vert, color: Colors.grey[500], size: 20),
+                          tooltip: 'Project actions',
+                          onSelected: (value) {
+                            if (value == 'edit') {
+                              context.push('/project/${project.id}/edit');
+                            } else if (value == 'delete') {
+                              _confirmDelete(context, ref, project);
+                            }
+                          },
+                          itemBuilder: (context) => const [
+                            PopupMenuItem(
+                              value: 'edit',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.edit_outlined, size: 18),
+                                  SizedBox(width: 10),
+                                  Text('Edit Project'),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'delete',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                                  SizedBox(width: 10),
+                                  Text('Delete Project', style: TextStyle(color: Colors.red)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ],
                 ),

@@ -92,7 +92,35 @@ class FirestoreProjectDatasourceImpl implements ProjectDatasource {
 
   @override
   Future<void> deleteProject(String projectId) async {
-    await _firestore.collection(_orgProjectsCollection).doc(projectId).delete();
+    final projectRef =
+        _firestore.collection(_orgProjectsCollection).doc(projectId);
+
+    // Firestore does not delete subcollections when a document is removed, so
+    // we clear each known subcollection first to avoid orphaned data.
+    const subcollections = [
+      _updatesSubcollection,
+      _filesSubcollection,
+      _designsSubcollection,
+      _settlementsSubcollection,
+      _roomsSubcollection,
+      _expensesSubcollection,
+      _chatMessagesSubcollection,
+      _complaintsSubcollection,
+    ];
+
+    for (final sub in subcollections) {
+      final snap = await projectRef.collection(sub).get();
+      // Batch deletes in chunks of 400 (Firestore's limit is 500 writes/batch).
+      for (var i = 0; i < snap.docs.length; i += 400) {
+        final batch = _firestore.batch();
+        for (final doc in snap.docs.skip(i).take(400)) {
+          batch.delete(doc.reference);
+        }
+        await batch.commit();
+      }
+    }
+
+    await projectRef.delete();
   }
 
   // ─── Updates ───────────────────────────────────────────────────────────

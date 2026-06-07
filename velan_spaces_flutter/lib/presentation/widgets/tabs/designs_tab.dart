@@ -248,20 +248,25 @@ class _UploadDesignSheetState extends ConsumerState<_UploadDesignSheet> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   String _selectedType = '2D Plan';
-  String? _filePath;
-  String? _fileName;
+  final List<String> _filePaths = [];
+  final List<String> _fileNames = [];
   bool _isLoading = false;
 
   Future<void> _pickFile() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+      allowMultiple: true,
     );
 
     if (result != null) {
       setState(() {
-        _filePath = result.files.single.path;
-        _fileName = result.files.single.name;
+        for (final f in result.files) {
+          if (f.path != null) {
+            _filePaths.add(f.path!);
+            _fileNames.add(f.name);
+          }
+        }
       });
     }
   }
@@ -271,34 +276,46 @@ class _UploadDesignSheetState extends ConsumerState<_UploadDesignSheet> {
     final file = await picker.pickImage(source: ImageSource.camera);
     if (file != null) {
       setState(() {
-        _filePath = file.path;
-        _fileName = file.name;
+        _filePaths.add(file.path);
+        _fileNames.add(file.name);
       });
     }
   }
 
+  void _removeFileAt(int index) {
+    setState(() {
+      _filePaths.removeAt(index);
+      _fileNames.removeAt(index);
+    });
+  }
+
   Future<void> _upload() async {
-    if (!_formKey.currentState!.validate() || _filePath == null) return;
-    
+    if (!_formKey.currentState!.validate() || _filePaths.isEmpty) return;
+
     setState(() => _isLoading = true);
 
     try {
       final repo = ref.read(projectRepositoryProvider);
       final userMeta = ref.read(currentUserMetaProvider);
       final userName = userMeta['name'] as String? ?? 'Project Manager';
-      
-      final design = DesignDocumentEntity(
-        id: '', // Will be ignored by addDesign
-        title: _titleController.text,
-        fileUrl: '', // Will be updated by upload logic
-        type: _selectedType,
-        approvalStatus: const DesignApprovalStatus(),
-        postedBy: userName,
-        timestamp: DateTime.now(),
-        projectId: widget.projectId,
-      );
+      final baseTitle = _titleController.text;
+      final multiple = _filePaths.length > 1;
 
-      await repo.addDesign(widget.projectId, design, filePath: _filePath);
+      // Create one design document per selected file.
+      for (var i = 0; i < _filePaths.length; i++) {
+        final design = DesignDocumentEntity(
+          id: '', // Will be ignored by addDesign
+          title: multiple ? '$baseTitle (${i + 1})' : baseTitle,
+          fileUrl: '', // Will be updated by upload logic
+          type: _selectedType,
+          approvalStatus: const DesignApprovalStatus(),
+          postedBy: userName,
+          timestamp: DateTime.now(),
+          projectId: widget.projectId,
+        );
+
+        await repo.addDesign(widget.projectId, design, filePath: _filePaths[i]);
+      }
 
       // ─── Notification trigger ─────────────────────────────
       try {
@@ -389,24 +406,34 @@ class _UploadDesignSheetState extends ConsumerState<_UploadDesignSheet> {
                 ),
               ],
             ),
-            if (_fileName != null)
+            if (_fileNames.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 8.0),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.check_circle, color: Colors.green, size: 16),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        _fileName!,
-                        style: const TextStyle(fontSize: 12, color: Colors.green),
-                        overflow: TextOverflow.ellipsis,
+                    for (var i = 0; i < _fileNames.length; i++)
+                      Row(
+                        children: [
+                          const Icon(Icons.check_circle, color: Colors.green, size: 16),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              _fileNames[i],
+                              style: const TextStyle(fontSize: 12, color: Colors.green),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          InkWell(
+                            onTap: () => _removeFileAt(i),
+                            child: const Icon(Icons.close, size: 16, color: Colors.grey),
+                          ),
+                        ],
                       ),
-                    ),
                   ],
                 ),
               ),
-            if (_filePath == null)
+            if (_filePaths.isEmpty)
                const Padding(
                  padding: EdgeInsets.only(top: 8.0),
                  child: Text('No file selected', style: TextStyle(color: Colors.red, fontSize: 12)),

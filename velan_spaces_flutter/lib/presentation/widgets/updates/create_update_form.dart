@@ -28,7 +28,8 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
   String? _selectedRoomId;
   final List<String> _selectedWorkerIds = [];
   
-  XFile? _mediaFile;
+  XFile? _mediaFile; // single video file when _type == 'video'
+  final List<XFile> _photoFiles = []; // multiple photos when _type == 'photo'
   VideoPlayerController? _videoController;
 
   bool _isPosting = false;
@@ -105,64 +106,91 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
 
   Future<void> _pickMedia(String type, ImageSource source) async {
     final picker = ImagePicker();
-    XFile? file;
 
     if (type == 'photo') {
-      file = await picker.pickImage(source: source);
+      // Gallery → allow selecting many photos at once. Camera → single shot
+      // appended to the existing selection.
+      if (source == ImageSource.gallery) {
+        final files = await picker.pickMultiImage();
+        if (files.isNotEmpty) {
+          setState(() {
+            _photoFiles.addAll(files);
+            _type = 'photo';
+            _mediaFile = null;
+            _videoController?.dispose();
+            _videoController = null;
+          });
+        }
+      } else {
+        final file = await picker.pickImage(source: source);
+        if (file != null) {
+          setState(() {
+            _photoFiles.add(file);
+            _type = 'photo';
+            _mediaFile = null;
+            _videoController?.dispose();
+            _videoController = null;
+          });
+        }
+      }
     } else if (type == 'video') {
-      file = await picker.pickVideo(source: source);
-    }
-
-    if (file != null) {
-      if (type == 'video') {
+      final file = await picker.pickVideo(source: source);
+      if (file != null) {
         _videoController?.dispose();
         _videoController = VideoPlayerController.file(File(file.path))
           ..initialize().then((_) {
             setState(() {});
           });
+        setState(() {
+          _mediaFile = file;
+          _photoFiles.clear();
+          _type = 'video';
+        });
       }
-      
-      setState(() {
-        _mediaFile = file;
-        _type = type;
-      });
     }
+  }
+
+  void _removePhotoAt(int index) {
+    setState(() {
+      _photoFiles.removeAt(index);
+      if (_photoFiles.isEmpty) _type = 'message';
+    });
   }
 
   void _clearMedia() {
     setState(() {
       _mediaFile = null;
+      _photoFiles.clear();
       _videoController?.dispose();
       _videoController = null;
       _type = 'message';
     });
   }
 
-  Future<String> _validateAndPrepareMedia() async {
-    if (_mediaFile == null) {
-      throw Exception('Please select a file');
-    }
-
-    final file = File(_mediaFile!.path);
-    final bytes = await file.length();
-    final maxBytes = _type == 'video' ? 200 * 1024 * 1024 : 15 * 1024 * 1024;
+  Future<void> _validateFileSize(String path, {required bool isVideo}) async {
+    final bytes = await File(path).length();
+    final maxBytes = isVideo ? 200 * 1024 * 1024 : 15 * 1024 * 1024;
     if (bytes > maxBytes) {
       throw Exception(
-        _type == 'video'
+        isVideo
             ? 'Video is too large. Select a file under 200 MB.'
             : 'Photo is too large. Select an image under 15 MB.',
       );
     }
-
-    return _mediaFile!.path;
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_isPosting) return;
-    if ((_type == 'photo' || _type == 'video') && _mediaFile == null) {
+    if (_type == 'photo' && _photoFiles.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a file')),
+        const SnackBar(content: Text('Please select at least one photo')),
+      );
+      return;
+    }
+    if (_type == 'video' && _mediaFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a video')),
       );
       return;
     }
@@ -180,25 +208,28 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
       final storage = ref.read(storageDatasourceProvider);
 
       List<String> mediaUrls = [];
+      final path = 'projects/${widget.projectId}/updates';
 
       // Upload Media if present
-      if (_mediaFile != null) {
-        final path = 'projects/${widget.projectId}/updates';
-        setState(() => _uploadStage = 'Preparing media');
-
-        // Compress media before upload to prevent OOM/timeout
-        String filePathToUpload = await _validateAndPrepareMedia();
-        if (_type == 'photo') {
-          filePathToUpload =
-              await MediaCompressionService.compressImage(_mediaFile!.path);
-        } else if (_type == 'video') {
-          filePathToUpload =
-              await MediaCompressionService.compressVideo(_mediaFile!.path);
+      if (_type == 'photo' && _photoFiles.isNotEmpty) {
+        setState(() => _uploadStage = 'Preparing photos');
+        // Compress each photo before upload to prevent OOM/timeout.
+        final compressedPaths = <String>[];
+        for (final f in _photoFiles) {
+          await _validateFileSize(f.path, isVideo: false);
+          compressedPaths.add(
+              await MediaCompressionService.compressImage(f.path));
         }
-
-        setState(() => _uploadStage = 'Uploading media');
-        final url = await storage.uploadFile(filePathToUpload, path);
-        mediaUrls.add(url);
+        setState(() =>
+            _uploadStage = 'Uploading ${compressedPaths.length} photo(s)');
+        mediaUrls = await storage.uploadMultipleFiles(compressedPaths, path);
+      } else if (_type == 'video' && _mediaFile != null) {
+        setState(() => _uploadStage = 'Preparing video');
+        await _validateFileSize(_mediaFile!.path, isVideo: true);
+        final compressed =
+            await MediaCompressionService.compressVideo(_mediaFile!.path);
+        setState(() => _uploadStage = 'Uploading video');
+        mediaUrls.add(await storage.uploadFile(compressed, path));
       }
 
       setState(() => _uploadStage = 'Saving update');
@@ -352,8 +383,64 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
               ),
               const SizedBox(height: 16),
   
-              // ─── Media Preview ────────────────────────────
-              if (_mediaFile != null)
+              // ─── Photo Preview (multiple) ─────────────────
+              if (_photoFiles.isNotEmpty) ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '${_photoFiles.length} photo(s) selected',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => _showMediaSourcePicker('photo'),
+                      icon: const Icon(Icons.add_a_photo, size: 18),
+                      label: const Text('Add more'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 100,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _photoFiles.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, index) {
+                      return Stack(
+                        alignment: Alignment.topRight,
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.file(
+                              File(_photoFiles[index].path),
+                              width: 100,
+                              height: 100,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                          InkWell(
+                            onTap: () => _removePhotoAt(index),
+                            child: Container(
+                              margin: const EdgeInsets.all(2),
+                              decoration: const BoxDecoration(
+                                color: Colors.black54,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.close,
+                                  color: Colors.white, size: 18),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              // ─── Video Preview (single) ───────────────────
+              if (_type == 'video' && _mediaFile != null) ...[
                 Stack(
                   alignment: Alignment.topRight,
                   children: [
@@ -365,17 +452,13 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
                       ),
-                      child: _type == 'photo'
-                          ? Image.file(
-                              File(_mediaFile!.path),
-                              fit: BoxFit.contain,
+                      child: _videoController != null &&
+                              _videoController!.value.isInitialized
+                          ? AspectRatio(
+                              aspectRatio: _videoController!.value.aspectRatio,
+                              child: VideoPlayer(_videoController!),
                             )
-                          : _videoController != null && _videoController!.value.isInitialized
-                              ? AspectRatio(
-                                  aspectRatio: _videoController!.value.aspectRatio,
-                                  child: VideoPlayer(_videoController!),
-                                )
-                              : const Center(child: CircularProgressIndicator()),
+                          : const Center(child: CircularProgressIndicator()),
                     ),
                     IconButton(
                       icon: const Icon(Icons.close, color: Colors.white),
@@ -384,7 +467,8 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
                     ),
                   ],
                 ),
-              if (_mediaFile != null) const SizedBox(height: 16),
+                const SizedBox(height: 16),
+              ],
   
               // ─── Content ──────────────────────────────────
               TextFormField(
