@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -412,12 +413,16 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(8),
-                            child: Image.file(
-                              File(_photoFiles[index].path),
-                              width: 100,
-                              height: 100,
-                              fit: BoxFit.cover,
-                            ),
+                            child: kIsWeb
+                                ? Image.network(
+                                    _photoFiles[index].path,
+                                    width: 100, height: 100, fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => const Icon(Icons.image, size: 48),
+                                  )
+                                : Image.file(
+                                    File(_photoFiles[index].path),
+                                    width: 100, height: 100, fit: BoxFit.cover,
+                                  ),
                           ),
                           InkWell(
                             onTap: () => _removePhotoAt(index),

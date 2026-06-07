@@ -93,7 +93,7 @@ class FCMService {
     );
 
     // Create high-priority Android channel
-    if (Platform.isAndroid) {
+    if (!kIsWeb && Platform.isAndroid) {
       await _localNotif
           .resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>()
@@ -190,7 +190,7 @@ class FCMService {
           .set({
         'fcmTokens': FieldValue.arrayUnion([token]),
         'lastTokenUpdated': FieldValue.serverTimestamp(),
-        'platform': Platform.isAndroid ? 'android' : 'ios',
+        'platform': kIsWeb ? 'web' : (Platform.isAndroid ? 'android' : 'ios'),
       }, SetOptions(merge: true));
       if (kDebugMode) print('✅ FCM token saved for user: $userId');
     } catch (e) {

@@ -471,24 +471,25 @@ class _QuoteBuilderScreenState extends ConsumerState<QuoteBuilderScreen> {
             const Text('Discount & Tax',
                 style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
+            DropdownButtonFormField<DiscountType>(
+              value: _discountType,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                  labelText: 'Discount Type',
+                  border: OutlineInputBorder(),
+                  isDense: true),
+              items: const [
+                DropdownMenuItem(
+                    value: DiscountType.flat, child: Text('₹ Flat amount')),
+                DropdownMenuItem(
+                    value: DiscountType.percent, child: Text('% Percentage')),
+              ],
+              onChanged: (v) =>
+                  setState(() => _discountType = v ?? _discountType),
+            ),
+            const SizedBox(height: 8),
             Row(
               children: [
-                SizedBox(
-                  width: 130,
-                  child: DropdownButtonFormField<DiscountType>(
-                    initialValue: _discountType,
-                    decoration: const InputDecoration(
-                        labelText: 'Discount', border: OutlineInputBorder(), isDense: true),
-                    items: const [
-                      DropdownMenuItem(value: DiscountType.flat, child: Text('₹ Flat')),
-                      DropdownMenuItem(
-                          value: DiscountType.percent, child: Text('% Percent')),
-                    ],
-                    onChanged: (v) =>
-                        setState(() => _discountType = v ?? _discountType),
-                  ),
-                ),
-                const SizedBox(width: 12),
                 Expanded(
                   child: TextField(
                     controller: _discount,
@@ -498,11 +499,13 @@ class _QuoteBuilderScreenState extends ConsumerState<QuoteBuilderScreen> {
                       FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
                     ],
                     decoration: const InputDecoration(
-                        labelText: 'Value', border: OutlineInputBorder(), isDense: true),
+                        labelText: 'Discount Value',
+                        border: OutlineInputBorder(),
+                        isDense: true),
                     onChanged: (_) => setState(() {}),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
                     controller: _gst,
@@ -512,7 +515,9 @@ class _QuoteBuilderScreenState extends ConsumerState<QuoteBuilderScreen> {
                       FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
                     ],
                     decoration: const InputDecoration(
-                        labelText: 'GST %', border: OutlineInputBorder(), isDense: true),
+                        labelText: 'GST %',
+                        border: OutlineInputBorder(),
+                        isDense: true),
                     onChanged: (_) => setState(() {}),
                   ),
                 ),
