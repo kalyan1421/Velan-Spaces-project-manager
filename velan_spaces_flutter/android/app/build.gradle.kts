@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -6,6 +8,13 @@ plugins {
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+// Load key.properties if it exists (local dev). CI uses env vars instead.
+val keystoreProps = Properties()
+val keystorePropsFile = rootProject.file("key.properties")
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.inputStream().use { keystoreProps.load(it) }
 }
 
 android {
@@ -24,10 +33,8 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.velanspaces.velan_spaces_flutter"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        // See: https://flutter.dev/to/review-gradle-config
         minSdk = flutter.minSdkVersion  // flutter_local_notifications requires minSdk 21+
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -36,12 +43,18 @@ android {
 
     signingConfigs {
         create("release") {
-            // PRODUCTION SIGNING — fill these values with your keystore details
-            // Run: flutter build appbundle --release  (after setting these)
-            storeFile = file(System.getenv("KEYSTORE_PATH") ?: "keystore/velan-spaces-release.jks")
-            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
-            keyAlias = System.getenv("KEY_ALIAS") ?: "velan-spaces"
-            keyPassword = System.getenv("KEY_PASSWORD") ?: ""
+            // Priority: key.properties (local) → env vars (CI)
+            storeFile = file(
+                keystoreProps["storeFile"] as String?
+                    ?: System.getenv("KEYSTORE_PATH")
+                    ?: "../keystore/velan-spaces-release.jks"   // relative to android/app/
+            )
+            storePassword = keystoreProps["storePassword"] as String?
+                ?: System.getenv("KEYSTORE_PASSWORD") ?: ""
+            keyAlias = keystoreProps["keyAlias"] as String?
+                ?: System.getenv("KEY_ALIAS") ?: "velan-spaces"
+            keyPassword = keystoreProps["keyPassword"] as String?
+                ?: System.getenv("KEY_PASSWORD") ?: ""
         }
     }
 
