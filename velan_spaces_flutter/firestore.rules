@@ -55,6 +55,32 @@ service cloud.firestore {
     // ─── SALES / LEADS ─────────────────────────────────────────────────────────
     match /leads/{leadId} {
       allow read, write: if request.auth != null;
+
+      // Quotations live under each lead/enquiry.
+      match /quotes/{quoteId} {
+        allow read, write: if request.auth != null;
+      }
+    }
+
+    // ─── QUOTATION: settings, rate card, templates ─────────────────────────────
+    // Admin manages company settings; admin AND manager manage the rate card and
+    // templates. Firebase Auth has no role claims here, so all blocks use
+    // `request.auth != null` and role filtering is enforced in-app.
+    match /orgSettings/{docId} {
+      allow read, write: if request.auth != null;
+
+      // e.g. orgSettings/quotation/counters/{year} for sequential quote numbers
+      match /{sub}/{subId} {
+        allow read, write: if request.auth != null;
+      }
+    }
+
+    match /catalogItems/{itemId} {
+      allow read, write: if request.auth != null;
+    }
+
+    match /quoteTemplates/{templateId} {
+      allow read, write: if request.auth != null;
     }
 
     // ─── WEBSITE PORTFOLIO ─────────────────────────────────────────────────────

@@ -76,12 +76,13 @@ class ProfileScreen extends ConsumerWidget {
 
           const SizedBox(height: 8),
 
-          // ── Quotation admin (head only) ───────────────────────────
-          if (role == UserRole.head) ...[
+          // ── Quotation tools (admin + manager) ─────────────────────
+          if (role == UserRole.head || role == UserRole.manager) ...[
             Container(
               color: Colors.white,
               child: Column(
                 children: [
+                  // Rate card + templates — managed by admin AND manager
                   _ProfileTile(
                     icon: Icons.request_quote_outlined,
                     label: 'Rate Card',
@@ -92,11 +93,13 @@ class ProfileScreen extends ConsumerWidget {
                     label: 'Quote Templates',
                     onTap: () => context.push('/quote-templates'),
                   ),
-                  _ProfileTile(
-                    icon: Icons.tune,
-                    label: 'Quotation Settings',
-                    onTap: () => context.push('/quotation-settings'),
-                  ),
+                  // Company branding / defaults — admin only
+                  if (role == UserRole.head)
+                    _ProfileTile(
+                      icon: Icons.tune,
+                      label: 'Quotation Settings',
+                      onTap: () => context.push('/quotation-settings'),
+                    ),
                 ],
               ),
             ),
