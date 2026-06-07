@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:velan_spaces_flutter/core/utils/bottom_sheet_utils.dart';
+import 'package:velan_spaces_flutter/data/seed/sample_catalog.dart';
 import 'package:velan_spaces_flutter/domain/entities/catalog_item_entity.dart';
 import 'package:velan_spaces_flutter/presentation/providers/quotation_providers.dart';
 
@@ -15,7 +16,16 @@ class CatalogScreen extends ConsumerWidget {
     final catalogAsync = ref.watch(catalogProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Rate Card')),
+      appBar: AppBar(
+        title: const Text('Rate Card'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.playlist_add),
+            tooltip: 'Load sample items',
+            onPressed: () => _loadSamples(context, ref),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'catalog_fab',
         onPressed: () => _openEditor(context, ref, null),
@@ -135,6 +145,28 @@ class _CatalogTile extends ConsumerWidget {
         ),
         onTap: () => _openEditor(context, ref, item),
       ),
+    );
+  }
+}
+
+Future<void> _loadSamples(BuildContext context, WidgetRef ref) async {
+  final ok = await showConfirmBottomSheet(
+    context,
+    title: 'Load sample rate card?',
+    message:
+        'Adds a starter set of items (components, accessories and services) you can edit or delete. Rates are examples — adjust to your real pricing.',
+    confirmLabel: 'Load',
+    confirmColor: const Color(0xFF22C55E),
+  );
+  if (ok != true) return;
+  final ctrl = ref.read(quotationControllerProvider.notifier);
+  final items = sampleCatalogItems();
+  for (final it in items) {
+    await ctrl.addCatalogItem(it);
+  }
+  if (context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Loaded ${items.length} sample items')),
     );
   }
 }
