@@ -11,6 +11,7 @@ class SettlementEntity {
     this.paymentMethod = '',
     this.addedBy = '',
     this.createdAt,
+    this.proofUrl = '',
   });
 
   final String id;
@@ -21,4 +22,5 @@ class SettlementEntity {
   final String paymentMethod;
   final String addedBy;
   final DateTime? createdAt;
+  final String proofUrl;
 }

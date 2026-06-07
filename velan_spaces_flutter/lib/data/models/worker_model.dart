@@ -7,6 +7,7 @@ class WorkerModel extends WorkerEntity {
     required super.name,
     super.phone,
     super.trade,
+    super.password,
     super.assignedProjects,
   });
 
@@ -17,6 +18,7 @@ class WorkerModel extends WorkerEntity {
       name: data['name'] ?? '',
       phone: data['phone'] ?? '',
       trade: data['trade'] ?? '',
+      password: data['password'] ?? '',
       assignedProjects: List<String>.from(data['assignedProjects'] ?? []),
     );
   }
@@ -26,6 +28,7 @@ class WorkerModel extends WorkerEntity {
       'name': name,
       'phone': phone,
       'trade': trade,
+      'password': password,
       'assignedProjects': assignedProjects,
     };
   }

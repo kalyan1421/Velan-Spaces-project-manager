@@ -44,12 +44,13 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'YOUR_WEB_API_KEY',
-    appId: 'YOUR_WEB_APP_ID',
-    messagingSenderId: 'YOUR_MESSAGING_SENDER_ID',
-    projectId: 'YOUR_PROJECT_ID',
-    authDomain: 'YOUR_AUTH_DOMAIN',
-    storageBucket: 'YOUR_STORAGE_BUCKET',
+    apiKey: 'AIzaSyDVjEztsxcWSN9Ilk8SeXsuj6mSXfUfN_g',
+    appId: '1:502284969422:web:dddd5ab7ba5236ca8b779f',
+    messagingSenderId: '502284969422',
+    projectId: 'velan-spaces-constructions',
+    authDomain: 'velan-spaces-constructions.firebaseapp.com',
+    storageBucket: 'velan-spaces-constructions.firebasestorage.app',
+    measurementId: 'G-4T7H6LRNFX',
   );
 
   static const FirebaseOptions android = FirebaseOptions(

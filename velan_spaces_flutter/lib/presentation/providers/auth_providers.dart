@@ -1,6 +1,10 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:velan_spaces_flutter/core/services/fcm_service.dart';
 import 'package:velan_spaces_flutter/data/datasources/auth_datasource.dart';
 import 'package:velan_spaces_flutter/data/datasources/firebase_auth_datasource.dart';
 import 'package:velan_spaces_flutter/data/repositories/auth_repository_impl.dart';
@@ -93,32 +97,34 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserEntity?>> {
       email: firebaseUser.email,
     ));
 
-    print('✅ Session restored: ${session.role.name}');
+    if (kDebugMode) print('✅ Session restored: ${session.role.name}');
     return true;
   }
 
   /// HEAD login with hardcoded credentials (admin / 12345)
   Future<bool> signInAsHead(String password) async {
-    print('🔑 Attempting Admin Login with password: $password');
+    if (kDebugMode) print('🔑 Attempting Admin Login with password: $password');
     if (password != '12345') {
-      print('❌ Admin Login Failed: Invalid Password');
+      if (kDebugMode) print('❌ Admin Login Failed: Invalid Password');
       state = AsyncValue.error('Invalid Admin Credentials', StackTrace.current);
       return false;
     }
     state = const AsyncValue.loading();
-    print('🔄 Signing in anonymously to Firebase...');
+    if (kDebugMode) print('🔄 Signing in anonymously to Firebase...');
     final result = await _authRepository.signInAnonymously();
     return result.fold(
       (failure) {
-        print('❌ Firebase Sign-In Failed: ${failure.message}');
+        if (kDebugMode) print('❌ Firebase Sign-In Failed: ${failure.message}');
         state = AsyncValue.error(failure.message, StackTrace.current);
         return false;
       },
       (user) async {
-        print('✅ Admin Login Successful. User ID: ${user.uid}');
+        if (kDebugMode) print('✅ Admin Login Successful. User ID: ${user.uid}');
         state = AsyncValue.data(user);
-        final meta = {'name': 'Admin'};
+        final meta = {'name': 'Admin', 'id': 'head'};
         await _setSessionAndPersist(UserRole.head, meta);
+        // ─── Initialize FCM ────────────────────────────────────
+        unawaited(_initFCM('head'));
         return true;
       },
     );
@@ -136,6 +142,20 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserEntity?>> {
         state = AsyncValue.error('Password required', StackTrace.current);
         return false;
       }
+
+      final manager = await _ref.read(workerManagerDatasourceProvider).getManagerByName(name.trim());
+      if (manager == null) {
+        state = AsyncValue.error('Manager ID not found', StackTrace.current);
+        return false;
+      }
+      if (manager.password != password) {
+        state = AsyncValue.error('Invalid password', StackTrace.current);
+        return false;
+      }
+      if (manager.isSuspended) {
+        state = AsyncValue.error('Account suspended by Admin', StackTrace.current);
+        return false;
+      }
       
       final result = await _authRepository.signInAnonymously();
       return result.fold(
@@ -145,8 +165,10 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserEntity?>> {
         },
         (user) async {
           state = AsyncValue.data(user);
-          final meta = {'name': name, 'id': name};
+          final meta = {'name': name, 'id': manager.id};
           await _setSessionAndPersist(UserRole.manager, meta);
+          // ─── Initialize FCM ────────────────────────────────────
+          unawaited(_initFCM(manager.id));
           return true;
         },
       );
@@ -157,11 +179,25 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserEntity?>> {
   }
 
   /// Worker login - simplified (any non-empty name)
-  Future<bool> signInAsWorker(String name) async {
+  Future<bool> signInAsWorker(String name, {String password = ''}) async {
     state = const AsyncValue.loading();
     try {
       if (name.trim().isEmpty) {
         state = AsyncValue.error('Worker ID required', StackTrace.current);
+        return false;
+      }
+      if (password.trim().isEmpty) {
+        state = AsyncValue.error('Password required', StackTrace.current);
+        return false;
+      }
+      
+      final worker = await _ref.read(workerManagerDatasourceProvider).getWorkerByName(name.trim());
+      if (worker == null) {
+        state = AsyncValue.error('Worker ID not found', StackTrace.current);
+        return false;
+      }
+      if (worker.password != password) {
+        state = AsyncValue.error('Invalid password', StackTrace.current);
         return false;
       }
       
@@ -173,8 +209,10 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserEntity?>> {
         },
         (user) async {
           state = AsyncValue.data(user);
-          final meta = {'name': name, 'id': name};
+          final meta = {'name': name, 'id': worker.id};
           await _setSessionAndPersist(UserRole.worker, meta);
+          // Workers get FCM too
+          unawaited(_initFCM(worker.id));
           return true;
         },
       );
@@ -185,22 +223,19 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserEntity?>> {
   }
 
   /// Client login - validates project ID exists
-  Future<bool> signInAsClient(String projectId) async {
+  Future<bool> signInAsClient(String projectInput) async {
     state = const AsyncValue.loading();
     try {
-      if (projectId.trim().isEmpty) {
+      if (projectInput.trim().isEmpty) {
         state = AsyncValue.error('Project ID required', StackTrace.current);
         return false;
       }
 
-      // Validate project exists
+      // Validate project exists — resolves by doc ID OR projectCode field
       final projectDs = _ref.read(firestoreProjectDatasourceProvider);
-      final project = await projectDs.getProjectById(projectId.trim());
-      
-      if (project == null) {
-        state = AsyncValue.error('Invalid Project ID', StackTrace.current);
-        return false;
-      }
+      final project = await projectDs.getProjectById(projectInput.trim());
+      // Use the real Firestore doc ID (not the typed code) for navigation
+      final resolvedProjectId = project.id;
 
       final result = await _authRepository.signInAnonymously();
       return result.fold(
@@ -210,19 +245,25 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserEntity?>> {
         },
         (user) async {
           state = AsyncValue.data(user);
-          final meta = {'projectId': projectId.trim()};
+          final meta = {'projectId': resolvedProjectId};
           await _setSessionAndPersist(UserRole.client, meta);
           return true;
         },
       );
     } catch (e) {
-      state = AsyncValue.error(e.toString(), StackTrace.current);
+      state = AsyncValue.error('Project not found. Check your project ID.', StackTrace.current);
       return false;
     }
   }
 
   Future<void> signOut() async {
     state = const AsyncValue.loading();
+    // Clean up FCM token before logout
+    final meta = _ref.read(currentUserMetaProvider);
+    final userId = meta['id'] as String? ?? '';
+    if (userId.isNotEmpty) {
+      await FCMService.instance.signOut(userId);
+    }
     // Clear persisted session first
     await SessionService.clearSession();
     final result = await _authRepository.signOut();
@@ -234,5 +275,21 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserEntity?>> {
         _ref.read(currentUserMetaProvider.notifier).state = {};
       },
     );
+  }
+
+  /// Initialize FCM push notifications for the logged-in user.
+  Future<void> _initFCM(String userId) async {
+    try {
+      await FCMService.instance.initialize(
+        userId: userId,
+        onNotificationTap: (projectId) {
+          // Navigation is not available here (no BuildContext).
+          // The App widget listens to FCM taps via GoRouter.
+          if (kDebugMode) print('🔔 Notification tap → project: $projectId');
+        },
+      );
+    } catch (e) {
+      if (kDebugMode) print('⚠️ FCM init error: $e');
+    }
   }
 }

@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:velan_spaces_flutter/core/theme.dart';
 import 'package:velan_spaces_flutter/domain/entities/timeline_entity.dart';
+import 'package:velan_spaces_flutter/domain/entities/user_role.dart';
+import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart';
+import 'package:velan_spaces_flutter/presentation/providers/project_providers.dart';
 import 'package:velan_spaces_flutter/presentation/providers/timeline_provider.dart';
 
 class TimelineTab extends ConsumerWidget {
@@ -12,19 +15,23 @@ class TimelineTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final timelineAsync = ref.watch(timelineProvider(projectId));
+    final role = ref.watch(currentUserRoleProvider);
 
-    return Column(
-      children: [
-        _TimelineHeader(projectId: projectId),
-        Expanded(
-          child: timelineAsync.when(
-            data: (phases) => phases.isEmpty 
-                ? _EmptyTimelineState(projectId: projectId) 
-                : _TimelineContent(projectId: projectId, phases: phases),
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (err, _) => Center(child: Text('Error: $err')),
-          ),
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(
+          child: _TimelineHeader(projectId: projectId, role: role),
         ),
+        timelineAsync.when(
+          data: (phases) => phases.isEmpty 
+              ? SliverFillRemaining(
+                  child: _EmptyTimelineState(projectId: projectId, role: role),
+                ) 
+              : _TimelineContentSlivers(projectId: projectId, phases: phases, role: role),
+          loading: () => const SliverFillRemaining(child: Center(child: CircularProgressIndicator())),
+          error: (err, _) => SliverFillRemaining(child: Center(child: Text('Error: $err'))),
+        ),
+        const SliverPadding(padding: EdgeInsets.only(bottom: 40)),
       ],
     );
   }
@@ -32,10 +39,12 @@ class TimelineTab extends ConsumerWidget {
 
 class _TimelineHeader extends ConsumerWidget {
   final String projectId;
-  const _TimelineHeader({required this.projectId});
+  final UserRole role;
+  const _TimelineHeader({required this.projectId, required this.role});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final canManage = role == UserRole.head || role == UserRole.manager;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       color: Colors.white,
@@ -51,26 +60,32 @@ class _TimelineHeader extends ConsumerWidget {
                 style: Theme.of(context).textTheme.bodySmall),
             ],
           ),
-          ElevatedButton.icon(
-            icon: const Icon(Icons.save, size: 18),
-            label: const Text("Save All"),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: VelanTheme.highlight,
-              foregroundColor: Colors.white,
+          if (canManage)
+            ElevatedButton.icon(
+              icon: const Icon(Icons.save, size: 18),
+              label: const Text("Save All"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: VelanTheme.highlight,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => ref.read(timelineProvider(projectId).notifier).saveAll(),
             ),
-            onPressed: () => ref.read(timelineProvider(projectId).notifier).saveAll(),
-          )
         ],
       ),
     );
   }
 }
 
-class _TimelineContent extends StatelessWidget {
+class _TimelineContentSlivers extends StatelessWidget {
   final String projectId;
   final List<TimelinePhaseEntity> phases;
+  final UserRole role;
 
-  const _TimelineContent({required this.projectId, required this.phases});
+  const _TimelineContentSlivers({
+    required this.projectId,
+    required this.phases,
+    required this.role,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -81,14 +96,16 @@ class _TimelineContent extends StatelessWidget {
     final completedTasks = phases.fold(0, (sum, p) => sum + p.tasks.where((t) => t.status == TaskStatus.done).length);
     
     double overallProgress = 0;
-    if (totalTasks > 0) overallProgress = completedTasks / totalTasks;
-    else if (totalPhases > 0) overallProgress = completedPhases / totalPhases;
+    if (totalTasks > 0) {
+      overallProgress = completedTasks / totalTasks;
+    } else if (totalPhases > 0) {
+      overallProgress = completedPhases / totalPhases;
+    }
 
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          // Progress Block
-          Card(
+    return SliverMainAxisGroup(
+      slivers: [
+        SliverToBoxAdapter(
+          child: Card(
             margin: const EdgeInsets.all(16),
             color: VelanTheme.highlight,
             child: Padding(
@@ -112,7 +129,7 @@ class _TimelineContent extends StatelessWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Overall Progress', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      const Text('Overall Progress', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 4),
                       Text('$completedPhases of $totalPhases phases completed', style: const TextStyle(color: Colors.white70, fontSize: 12)),
                       Text('$completedTasks tasks done', style: const TextStyle(color: Colors.white70, fontSize: 12)),
@@ -122,35 +139,36 @@ class _TimelineContent extends StatelessWidget {
               ),
             ),
           ),
-
-          // Phase List (Reorderable)
-          // Note: ReorderableListView inside SingleChildScrollView can be tricky. 
-          // For MVP using a standard List + standard mapping.
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: phases.length,
-            itemBuilder: (context, index) {
-              return _PhaseCard(projectId: projectId, phase: phases[index], index: index + 1);
+        ),
+        SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (context, index) {
+              return _PhaseCard(
+                projectId: projectId,
+                phase: phases[index],
+                index: index + 1,
+                role: role,
+              );
             },
+            childCount: phases.length,
           ),
-          
-          const SizedBox(height: 10),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: OutlinedButton.icon(
-            onPressed: () => _showAddPhaseBottomSheet(context, projectId),
-              icon: const Icon(Icons.add),
-              label: const Text("Add New Phase"),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 48),
-                side: BorderSide(color: VelanTheme.highlight),
+        ),
+        if (role == UserRole.head || role == UserRole.manager)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: OutlinedButton.icon(
+                onPressed: () => _showAddPhaseBottomSheet(context, projectId),
+                icon: const Icon(Icons.add),
+                label: const Text("Add New Phase"),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 48),
+                  side: const BorderSide(color: VelanTheme.highlight),
+                ),
               ),
             ),
           ),
-          const SizedBox(height: 40),
-        ],
-      ),
+      ],
     );
   }
 }
@@ -159,8 +177,14 @@ class _PhaseCard extends ConsumerWidget {
   final String projectId;
   final TimelinePhaseEntity phase;
   final int index;
+  final UserRole role;
 
-  const _PhaseCard({required this.projectId, required this.phase, required this.index});
+  const _PhaseCard({
+    required this.projectId,
+    required this.phase,
+    required this.index,
+    required this.role,
+  });
 
   Color _getStatusColor(PhaseStatus status) {
     switch(status) {
@@ -173,13 +197,16 @@ class _PhaseCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final dateFormat = DateFormat('MMM d');
+    final meta = ref.watch(currentUserMetaProvider);
+    final workerId = meta['id'] as String? ?? '';
+    final canManage = role == UserRole.head || role == UserRole.manager;
     
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       elevation: 2,
       child: ExpansionTile(
         leading: CircleAvatar(
-          backgroundColor: _getStatusColor(phase.status).withOpacity(0.1),
+          backgroundColor: _getStatusColor(phase.status).withValues(alpha: 0.1),
           child: Text('$index', 
             style: TextStyle(color: _getStatusColor(phase.status), fontWeight: FontWeight.bold)),
         ),
@@ -207,54 +234,70 @@ class _PhaseCard extends ConsumerWidget {
             ]
           ],
         ),
-        trailing: PopupMenuButton(
-          itemBuilder: (context) => [
-            const PopupMenuItem(value: 'edit', child: Text('Edit Phase')),
-            if (phase.status != PhaseStatus.completed)
-              const PopupMenuItem(value: 'complete', child: Text('Mark Complete')),
-            const PopupMenuItem(value: 'delete', child: Text('Delete Phase')),
-          ],
-          onSelected: (val) {
-            if (val == 'delete') {
-              ref.read(timelineProvider(projectId).notifier).removePhase(phase.id);
-            } else if (val == 'edit') {
-              _showEditPhaseBottomSheet(context, ref, projectId, phase);
-            } else if (val == 'complete') {
-              // Check if tasks are done? 
-              // For now, allow force complete but maybe show snackbar if tasks pending?
-              // The provider logic is simple, UI can just call it.
-              if (phase.tasks.any((t) => t.status != TaskStatus.done)) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Warning: Some tasks are not finished yet.")));
-              }
-              ref.read(timelineProvider(projectId).notifier).markPhaseComplete(phase.id);
-            }
-          },
-        ),
+        trailing: canManage
+            ? PopupMenuButton(
+                itemBuilder: (context) => [
+                  const PopupMenuItem(value: 'edit', child: Text('Edit Phase')),
+                  if (phase.status != PhaseStatus.completed)
+                    const PopupMenuItem(value: 'complete', child: Text('Mark Complete')),
+                  const PopupMenuItem(value: 'delete', child: Text('Delete Phase')),
+                ],
+                onSelected: (val) {
+                  if (val == 'delete') {
+                    ref.read(timelineProvider(projectId).notifier).removePhase(phase.id);
+                  } else if (val == 'edit') {
+                    _showEditPhaseBottomSheet(context, ref, projectId, phase);
+                  } else if (val == 'complete') {
+                    if (phase.tasks.any((t) => t.status != TaskStatus.done)) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Warning: Some tasks are not finished yet.")));
+                    }
+                    ref.read(timelineProvider(projectId).notifier).markPhaseComplete(phase.id);
+                  }
+                },
+              )
+            : null,
         children: [
           // Task List
           if (phase.tasks.isEmpty)
              const Padding(padding: EdgeInsets.all(16), child: Text("No tasks added.", style: TextStyle(color: Colors.grey))),
           
-          ...phase.tasks.map((task) => CheckboxListTile(
-            title: Text(task.title, style: TextStyle(
-              decoration: task.status == TaskStatus.done ? TextDecoration.lineThrough : null,
-              color: task.status == TaskStatus.done ? Colors.grey : Colors.black87
-            )),
-            value: task.status == TaskStatus.done,
-            // Subtitle for task details (worker, planned dates) could go here later
-            onChanged: (val) {
-              ref.read(timelineProvider(projectId).notifier).toggleTaskStatus(phase.id, task.id);
-            },
-            controlAffinity: ListTileControlAffinity.leading,
-            dense: true,
-          )),
+          ...phase.tasks.map((task) {
+            final canUpdateTask = canManage ||
+                (role == UserRole.worker && task.assignedWorkerId == workerId);
+            final dueLabel = task.plannedEnd == null
+                ? 'No deadline'
+                : 'Due ${dateFormat.format(task.plannedEnd!)}';
+            final extra = <String>[
+              dueLabel,
+              if (task.checklistItems.isNotEmpty)
+                '${task.completedChecklistCount}/${task.checklistItems.length} checklist',
+              if (task.photoProofUrls.isNotEmpty)
+                '${task.photoProofUrls.length} proof',
+            ];
+            return CheckboxListTile(
+              title: Text(task.title, style: TextStyle(
+                decoration: task.status == TaskStatus.done ? TextDecoration.lineThrough : null,
+                color: task.status == TaskStatus.done ? Colors.grey : Colors.black87,
+              )),
+              subtitle: Text(extra.join(' • ')),
+              value: task.status == TaskStatus.done,
+              onChanged: canUpdateTask
+                  ? (val) {
+                      ref.read(timelineProvider(projectId).notifier).toggleTaskStatus(phase.id, task.id);
+                    }
+                  : null,
+              controlAffinity: ListTileControlAffinity.leading,
+              dense: true,
+            );
+          }),
           
           // Add Task Button
-          ListTile(
-            leading: const Icon(Icons.add_circle_outline),
-            title: const Text("Add Task"),
-            onTap: () => _showAddTaskBottomSheet(context, ref, projectId, phase.id),
-          )
+          if (canManage)
+            ListTile(
+              leading: const Icon(Icons.add_circle_outline),
+              title: const Text("Add Task"),
+              onTap: () => _showAddTaskBottomSheet(context, ref, projectId, phase.id),
+            )
         ],
       ),
     );
@@ -271,9 +314,9 @@ class _StatusChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withOpacity(0.3))
+        border: Border.all(color: color.withValues(alpha: 0.3))
       ),
       child: Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
     );
@@ -282,10 +325,12 @@ class _StatusChip extends StatelessWidget {
 
 class _EmptyTimelineState extends StatelessWidget {
   final String projectId;
-  const _EmptyTimelineState({required this.projectId});
+  final UserRole role;
+  const _EmptyTimelineState({required this.projectId, required this.role});
 
   @override
   Widget build(BuildContext context) {
+    final canManage = role == UserRole.head || role == UserRole.manager;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -296,15 +341,16 @@ class _EmptyTimelineState extends StatelessWidget {
           const SizedBox(height: 8),
           const Text("Start by adding a phase.", style: TextStyle(color: Colors.grey)),
           const SizedBox(height: 24),
-          OutlinedButton.icon(
-            onPressed: () => _showAddPhaseBottomSheet(context, projectId),
-            icon: const Icon(Icons.add),
-            label: const Text("Add New Phase"),
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              side: BorderSide(color: VelanTheme.highlight),
+          if (canManage)
+            OutlinedButton.icon(
+              onPressed: () => _showAddPhaseBottomSheet(context, projectId),
+              icon: const Icon(Icons.add),
+              label: const Text("Add New Phase"),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                side: const BorderSide(color: VelanTheme.highlight),
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -523,8 +569,15 @@ void _showAddTaskBottomSheet(BuildContext context, WidgetRef ref, String project
   final formKey = GlobalKey<FormState>();
   final titleCtrl = TextEditingController();
   final descCtrl = TextEditingController();
+  final checklistCtrl = TextEditingController();
   DateTime start = DateTime.now();
   DateTime end = DateTime.now().add(const Duration(days: 2));
+  String? selectedWorkerId;
+  String? selectedRoomId;
+  var priority = TaskPriority.medium;
+  final rooms = ref.read(projectRoomsProvider(projectId)).valueOrNull ?? const [];
+  final workers = [...(ref.read(validProjectWorkersProvider(projectId)).valueOrNull ?? const [])]
+    ..sort((a, b) => a.trade.compareTo(b.trade));
 
   showModalBottomSheet(
     context: context,
@@ -577,6 +630,74 @@ void _showAddTaskBottomSheet(BuildContext context, WidgetRef ref, String project
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
                 maxLines: 3,
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: selectedWorkerId,
+                decoration: const InputDecoration(
+                  labelText: 'Assign worker',
+                  border: OutlineInputBorder(),
+                ),
+                items: workers
+                    .map(
+                      (worker) => DropdownMenuItem<String>(
+                        value: worker.id,
+                        child: Text(
+                          worker.trade.isEmpty
+                              ? worker.name
+                              : '${worker.name} • ${worker.trade}',
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) => selectedWorkerId = value,
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: selectedRoomId,
+                decoration: const InputDecoration(
+                  labelText: 'Room',
+                  border: OutlineInputBorder(),
+                ),
+                items: rooms
+                    .map(
+                      (room) => DropdownMenuItem<String>(
+                        value: room.id,
+                        child: Text(room.name),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) => selectedRoomId = value,
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<TaskPriority>(
+                initialValue: priority,
+                decoration: const InputDecoration(
+                  labelText: 'Priority',
+                  border: OutlineInputBorder(),
+                ),
+                items: TaskPriority.values
+                    .map(
+                      (item) => DropdownMenuItem<TaskPriority>(
+                        value: item,
+                        child: Text(item.name),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    priority = value;
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: checklistCtrl,
+                decoration: InputDecoration(
+                  hintText: 'Checklist items separated by commas',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
               ),
               const SizedBox(height: 16),
               Row(
@@ -663,8 +784,22 @@ void _showAddTaskBottomSheet(BuildContext context, WidgetRef ref, String project
                           phaseId, 
                           titleCtrl.text, 
                           description: descCtrl.text,
+                          workerId: selectedWorkerId,
+                          roomId: selectedRoomId,
                           plannedStart: start,
-                          plannedEnd: end
+                          plannedEnd: end,
+                          priority: priority,
+                          checklistItems: checklistCtrl.text
+                              .split(',')
+                              .map((item) => item.trim())
+                              .where((item) => item.isNotEmpty)
+                              .map(
+                                (item) => TaskChecklistItem(
+                                  id: '${DateTime.now().millisecondsSinceEpoch}-$item',
+                                  label: item,
+                                ),
+                              )
+                              .toList(),
                         );
                         Navigator.pop(context);
                       }

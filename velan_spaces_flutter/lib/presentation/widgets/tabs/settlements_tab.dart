@@ -1,18 +1,42 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:velan_spaces_flutter/core/theme.dart';
+import 'package:velan_spaces_flutter/core/utils/bottom_sheet_utils.dart';
+import 'package:velan_spaces_flutter/domain/entities/user_role.dart';
+import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart';
 import 'package:velan_spaces_flutter/presentation/providers/project_providers.dart';
+import 'package:velan_spaces_flutter/presentation/widgets/dialogs/add_settlement_dialog.dart';
 import 'package:intl/intl.dart';
 
 class SettlementsTab extends ConsumerWidget {
   const SettlementsTab({required this.projectId, super.key});
   final String projectId;
 
+  static void _showProofDialog(BuildContext context, String proofUrl, String title) {
+    showProofBottomSheet(context, proofUrl, title);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settlementsAsync = ref.watch(projectSettlementsProvider(projectId));
+    final userRole = ref.watch(currentUserRoleProvider);
 
-    return settlementsAsync.when(
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: (userRole == UserRole.head || userRole == UserRole.manager)
+          ? FloatingActionButton(
+              heroTag: 'settlements_fab',
+              onPressed: () {
+                showFormBottomSheet(
+                  context: context,
+                  title: 'Add Settlement',
+                  child: AddSettlementDialog(projectId: projectId),
+                );
+              },
+              child: const Icon(Icons.add),
+            )
+          : null,
+      body: settlementsAsync.when(
       data: (settlements) {
         final totalSettled =
             settlements.fold<double>(0, (sum, s) => sum + s.amount);
@@ -96,6 +120,22 @@ class SettlementsTab extends ConsumerWidget {
                                     ],
                                   ),
                                 ),
+                                if (s.proofUrl.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: InkWell(
+                                      onTap: () => _showProofDialog(context, s.proofUrl, s.description),
+                                      borderRadius: BorderRadius.circular(6),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(6),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue.shade50,
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Icon(Icons.image, size: 18, color: Colors.blue.shade700),
+                                      ),
+                                    ),
+                                  ),
                                 Text(
                                   '₹${NumberFormat('#,##,###').format(s.amount)}',
                                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -115,6 +155,7 @@ class SettlementsTab extends ConsumerWidget {
       },
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (err, _) => Center(child: Text('Error: $err')),
+    ),
     );
   }
 }

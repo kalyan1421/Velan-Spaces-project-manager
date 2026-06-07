@@ -6,11 +6,13 @@ abstract class WorkerManagerDatasource {
   Stream<List<ManagerModel>> watchAllManagers();
   Future<String> addManager(ManagerModel manager);
   Future<void> updateManager(String managerId, Map<String, dynamic> data);
+  Future<void> deleteManager(String managerId);
 
   // Workers
   Stream<List<WorkerModel>> watchAllWorkers();
   Future<String> addWorker(WorkerModel worker);
   Future<void> updateWorker(String workerId, Map<String, dynamic> data);
+  Future<void> deleteWorker(String workerId);
   Future<WorkerModel?> getWorkerByName(String name);
   Future<ManagerModel?> getManagerByName(String name);
 }

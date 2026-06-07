@@ -3,12 +3,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:velan_spaces_flutter/core/theme.dart';
 import 'package:velan_spaces_flutter/domain/entities/project_update_entity.dart';
-import 'package:velan_spaces_flutter/domain/entities/user_role.dart';
 import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart';
+import 'package:velan_spaces_flutter/presentation/providers/notification_providers.dart';
 import 'package:velan_spaces_flutter/presentation/providers/project_providers.dart';
 import 'package:video_player/video_player.dart';
+import 'package:velan_spaces_flutter/core/services/media_compression_service.dart';
 
 class CreateUpdateForm extends ConsumerStatefulWidget {
   const CreateUpdateForm({required this.projectId, super.key});
@@ -32,6 +32,9 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
   VideoPlayerController? _videoController;
 
   bool _isPosting = false;
+  String? _uploadStage;
+  String? _uploadError;
+  DateTime? _lastPostedAt;
 
   final List<String> _categories = [
     'General',
@@ -58,14 +61,56 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
     super.dispose();
   }
 
-  Future<void> _pickMedia(String type) async {
+  void _showMediaSourcePicker(String type) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                type == 'photo' ? 'Select Photo Source' : 'Select Video Source',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const Icon(Icons.camera_alt, color: Colors.black87),
+                title: const Text('Camera'),
+                subtitle: Text(type == 'photo' ? 'Take a photo' : 'Record a video'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickMedia(type, ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library, color: Colors.black87),
+                title: const Text('Gallery'),
+                subtitle: Text(type == 'photo' ? 'Choose from gallery' : 'Choose from gallery'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickMedia(type, ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickMedia(String type, ImageSource source) async {
     final picker = ImagePicker();
     XFile? file;
 
     if (type == 'photo') {
-      file = await picker.pickImage(source: ImageSource.gallery);
+      file = await picker.pickImage(source: source);
     } else if (type == 'video') {
-      file = await picker.pickVideo(source: ImageSource.gallery);
+      file = await picker.pickVideo(source: source);
     }
 
     if (file != null) {
@@ -93,8 +138,28 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
     });
   }
 
+  Future<String> _validateAndPrepareMedia() async {
+    if (_mediaFile == null) {
+      throw Exception('Please select a file');
+    }
+
+    final file = File(_mediaFile!.path);
+    final bytes = await file.length();
+    final maxBytes = _type == 'video' ? 200 * 1024 * 1024 : 15 * 1024 * 1024;
+    if (bytes > maxBytes) {
+      throw Exception(
+        _type == 'video'
+            ? 'Video is too large. Select a file under 200 MB.'
+            : 'Photo is too large. Select an image under 15 MB.',
+      );
+    }
+
+    return _mediaFile!.path;
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_isPosting) return;
     if ((_type == 'photo' || _type == 'video') && _mediaFile == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a file')),
@@ -102,7 +167,11 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
       return;
     }
 
-    setState(() => _isPosting = true);
+    setState(() {
+      _isPosting = true;
+      _uploadError = null;
+      _uploadStage = 'Validating update';
+    });
 
     try {
       final repo = ref.read(projectRepositoryProvider);
@@ -115,10 +184,24 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
       // Upload Media if present
       if (_mediaFile != null) {
         final path = 'projects/${widget.projectId}/updates';
-        final url = await storage.uploadFile(_mediaFile!.path, path);
+        setState(() => _uploadStage = 'Preparing media');
+
+        // Compress media before upload to prevent OOM/timeout
+        String filePathToUpload = await _validateAndPrepareMedia();
+        if (_type == 'photo') {
+          filePathToUpload =
+              await MediaCompressionService.compressImage(_mediaFile!.path);
+        } else if (_type == 'video') {
+          filePathToUpload =
+              await MediaCompressionService.compressVideo(_mediaFile!.path);
+        }
+
+        setState(() => _uploadStage = 'Uploading media');
+        final url = await storage.uploadFile(filePathToUpload, path);
         mediaUrls.add(url);
       }
 
+      setState(() => _uploadStage = 'Saving update');
       final update = ProjectUpdateEntity(
         id: '',
         postedBy: meta['name'] ?? 'Unknown',
@@ -134,6 +217,24 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
 
       await repo.addUpdate(widget.projectId, update);
 
+      // ─── Notification trigger ─────────────────────────────
+      try {
+        setState(() => _uploadStage = 'Sending notifications');
+        final ns = ref.read(notificationServiceProvider);
+        // Fetch project to get managerIds
+        final project = await repo.getProjectById(widget.projectId)
+            .then((r) => r.fold((_) => null, (p) => p));
+        await ns.dispatchUpdateNotification(
+          senderRole: role,
+          senderId: meta['id'] as String? ?? '',
+          senderName: meta['name'] as String? ?? 'Unknown',
+          projectId: widget.projectId,
+          projectName: project?.projectName ?? '',
+          managerIds: project?.managerIds ?? [],
+        );
+      } catch (_) {}
+      // ─────────────────────────────────────────────────────
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Update posted successfully!')),
@@ -145,11 +246,16 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
           _selectedCategory = null;
           _selectedRoomId = null;
           _selectedWorkerIds.clear();
+          _uploadStage = null;
+          _lastPostedAt = DateTime.now();
         });
-        // Close if implemented as bottom sheet, or just reset state
       }
     } catch (e) {
       if (mounted) {
+        setState(() {
+          _uploadError = e.toString();
+          _uploadStage = null;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e')),
         );
@@ -175,10 +281,10 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.withOpacity(0.2)),
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -190,6 +296,27 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (_uploadStage != null || _uploadError != null || _lastPostedAt != null)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: _uploadError != null
+                        ? Theme.of(context)
+                            .colorScheme
+                            .errorContainer
+                            .withValues(alpha: 0.6)
+                        : Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    _uploadError ??
+                        _uploadStage ??
+                        'Last update posted at ${TimeOfDay.fromDateTime(_lastPostedAt!).format(context)}',
+                  ),
+                ),
               // ─── Input Type Toggle ────────────────────────
               SegmentedButton<String>(
                 segments: const [
@@ -213,12 +340,12 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
                 onSelectionChanged: (Set<String> newSelection) {
                   final type = newSelection.first;
                   if (type != 'message') {
-                    _pickMedia(type);
+                    _showMediaSourcePicker(type);
                   } else {
                     _clearMedia();
                   }
                 },
-                style: ButtonStyle(
+                style: const ButtonStyle(
                   visualDensity: VisualDensity.compact,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
@@ -236,7 +363,7 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
                       decoration: BoxDecoration(
                         color: Colors.black,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                        border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
                       ),
                       child: _type == 'photo'
                           ? Image.file(

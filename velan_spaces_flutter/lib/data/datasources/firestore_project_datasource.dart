@@ -7,6 +7,8 @@ import 'package:velan_spaces_flutter/data/models/design_document_model.dart';
 import 'package:velan_spaces_flutter/data/models/file_model.dart';
 import 'package:velan_spaces_flutter/data/models/room_model.dart';
 import 'package:velan_spaces_flutter/data/models/expense_model.dart';
+import 'package:velan_spaces_flutter/data/models/project_chat_message_model.dart';
+import 'package:velan_spaces_flutter/data/models/project_complaint_model.dart';
 
 // New Schema Path
 const String _orgProjectsCollection = 'projects';
@@ -15,7 +17,9 @@ const String _filesSubcollection = 'files';
 const String _designsSubcollection = 'designs';
 const String _settlementsSubcollection = 'settlements';
 const String _roomsSubcollection = 'rooms';
-const String _expensesSubcollection = 'expenses';
+const String _expensesSubcollection = 'budgetTransactions';
+const String _chatMessagesSubcollection = 'chatMessages';
+const String _complaintsSubcollection = 'complaints';
 
 class FirestoreProjectDatasourceImpl implements ProjectDatasource {
   final FirebaseFirestore _firestore;
@@ -59,17 +63,36 @@ class FirestoreProjectDatasourceImpl implements ProjectDatasource {
 
   @override
   Future<ProjectModel> getProjectById(String projectId) async {
-    final docSnap = await _firestore.collection(_orgProjectsCollection).doc(projectId).get();
+    // 1. Try direct Firestore doc ID lookup first (fastest)
+    final docSnap = await _firestore
+        .collection(_orgProjectsCollection)
+        .doc(projectId)
+        .get();
     if (docSnap.exists) {
       return ProjectModel.fromSnapshot(docSnap);
-    } else {
-      throw Exception('Project not found');
     }
+
+    // 2. Fall back: query by projectCode field (client enters short code like 'demo1431')
+    final querySnap = await _firestore
+        .collection(_orgProjectsCollection)
+        .where('projectCode', isEqualTo: projectId)
+        .limit(1)
+        .get();
+    if (querySnap.docs.isNotEmpty) {
+      return ProjectModel.fromSnapshot(querySnap.docs.first);
+    }
+
+    throw Exception('Project not found for ID/code: $projectId');
   }
 
   @override
   Future<void> updateProject(String projectId, Map<String, dynamic> data) async {
     await _firestore.collection(_orgProjectsCollection).doc(projectId).update(data);
+  }
+
+  @override
+  Future<void> deleteProject(String projectId) async {
+    await _firestore.collection(_orgProjectsCollection).doc(projectId).delete();
   }
 
   // ─── Updates ───────────────────────────────────────────────────────────
@@ -93,12 +116,6 @@ class FirestoreProjectDatasourceImpl implements ProjectDatasource {
         .collection(_orgProjectsCollection)
         .doc(projectId)
         .collection(_updatesSubcollection);
-
-    if (update.progressPercentage != null) {
-      await _firestore.collection(_orgProjectsCollection).doc(projectId).update({
-        'completionPercentage': update.progressPercentage,
-      });
-    }
 
     await updatesColl.add({
       ...update.toJson(),
@@ -274,6 +291,16 @@ class FirestoreProjectDatasourceImpl implements ProjectDatasource {
         .update(data);
   }
 
+  @override
+  Future<void> deleteRoom(String projectId, String roomId) async {
+    await _firestore
+        .collection(_orgProjectsCollection)
+        .doc(projectId)
+        .collection(_roomsSubcollection)
+        .doc(roomId)
+        .delete();
+  }
+
   // ─── Expenses (formerly Budget Transactions) ──────────────────────────
 
   @override
@@ -299,5 +326,99 @@ class FirestoreProjectDatasourceImpl implements ProjectDatasource {
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
-}
 
+  @override
+  Future<void> updateExpense(
+      String projectId, String expenseId, Map<String, dynamic> data) async {
+    await _firestore
+        .collection(_orgProjectsCollection)
+        .doc(projectId)
+        .collection(_expensesSubcollection)
+        .doc(expenseId)
+        .update(data);
+  }
+
+  @override
+  Future<void> deleteExpense(String projectId, String expenseId) async {
+    await _firestore
+        .collection(_orgProjectsCollection)
+        .doc(projectId)
+        .collection(_expensesSubcollection)
+        .doc(expenseId)
+        .delete();
+  }
+
+  @override
+  Stream<List<ProjectChatMessageModel>> watchProjectChatMessages(String projectId) {
+    return _firestore
+        .collection(_orgProjectsCollection)
+        .doc(projectId)
+        .collection(_chatMessagesSubcollection)
+        .orderBy('createdAt', descending: false)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => ProjectChatMessageModel.fromSnapshot(doc))
+            .toList());
+  }
+
+  @override
+  Future<void> addProjectChatMessage(
+    String projectId,
+    ProjectChatMessageModel message,
+  ) async {
+    await _firestore
+        .collection(_orgProjectsCollection)
+        .doc(projectId)
+        .collection(_chatMessagesSubcollection)
+        .add({
+      ...message.toJson(),
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  @override
+  Stream<List<ProjectComplaintModel>> watchProjectComplaints(String projectId) {
+    return _firestore
+        .collection(_orgProjectsCollection)
+        .doc(projectId)
+        .collection(_complaintsSubcollection)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => ProjectComplaintModel.fromSnapshot(doc))
+            .toList());
+  }
+
+  @override
+  Future<void> addProjectComplaint(
+    String projectId,
+    ProjectComplaintModel complaint,
+  ) async {
+    await _firestore
+        .collection(_orgProjectsCollection)
+        .doc(projectId)
+        .collection(_complaintsSubcollection)
+        .add({
+      ...complaint.toJson(),
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  @override
+  Future<void> updateProjectComplaint(
+    String projectId,
+    String complaintId,
+    Map<String, dynamic> data,
+  ) async {
+    await _firestore
+        .collection(_orgProjectsCollection)
+        .doc(projectId)
+        .collection(_complaintsSubcollection)
+        .doc(complaintId)
+        .update({
+      ...data,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+}

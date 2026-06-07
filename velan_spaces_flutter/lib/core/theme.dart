@@ -11,6 +11,8 @@ class VelanTheme {
   static const Color highlight = Color(0xFFFFB347); // Pastel Gold/Yellow (Matches Login)
   static const Color gold = Color(0xFFFFD54F);
   static const Color success = Color(0xFF00C853);
+  static const Color error = Color(0xFFCF6679);
+  static const Color background = Color(0xFF1A1A2E);
   static const Color surface = Color(0xFF1E1E30);
   static const Color surfaceLight = Color(0xFF2A2A40);
   static const Color textPrimary = Color(0xFFF5F5F5);

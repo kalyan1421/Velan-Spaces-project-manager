@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:velan_spaces_flutter/core/theme.dart';
+import 'package:velan_spaces_flutter/presentation/providers/notification_providers.dart';
+import 'package:velan_spaces_flutter/presentation/providers/project_providers.dart';
 import 'package:velan_spaces_flutter/presentation/providers/worker_manager_providers.dart';
 
 class CreateWorkerBottomSheet extends ConsumerStatefulWidget {
@@ -30,6 +32,7 @@ class _CreateWorkerBottomSheetState
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _tradeController = TextEditingController();
+  final _passwordController = TextEditingController();
 
   bool _isLoading = false;
 
@@ -38,6 +41,7 @@ class _CreateWorkerBottomSheetState
     _nameController.dispose();
     _phoneController.dispose();
     _tradeController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
@@ -50,6 +54,7 @@ class _CreateWorkerBottomSheetState
         .read(workerManagerControllerProvider.notifier)
         .addWorker(
           name: _nameController.text.trim(),
+          password: _passwordController.text.trim(),
           phone: _phoneController.text.trim().isEmpty
               ? null
               : _phoneController.text.trim(),
@@ -62,6 +67,26 @@ class _CreateWorkerBottomSheetState
     if (mounted) {
       setState(() => _isLoading = false);
       if (success) {
+        // ─── Notification trigger ─────────────────────────────
+        if (widget.projectId != null) {
+          try {
+            final repo = ref.read(projectRepositoryProvider);
+            final project = await repo.getProjectById(widget.projectId!)
+                .then((r) => r.fold((_) => null, (p) => p));
+            if (project != null) {
+              final ns = ref.read(notificationServiceProvider);
+              for (final mId in project.managerIds) {
+                await ns.notifyManagerOfWorkerAdded(
+                  managerId: mId,
+                  projectId: widget.projectId!,
+                  projectName: project.projectName,
+                  workerName: _nameController.text.trim(),
+                );
+              }
+            }
+          } catch (_) {}
+        }
+        // ─────────────────────────────────────────────────────
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Worker added successfully')),
@@ -127,6 +152,24 @@ class _CreateWorkerBottomSheetState
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
                     return 'Please enter worker name';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // Password Field
+              TextFormField(
+                controller: _passwordController,
+                decoration: const InputDecoration(
+                  labelText: 'Password',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.lock),
+                ),
+                obscureText: true,
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Please enter worker password';
                   }
                   return null;
                 },

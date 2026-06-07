@@ -2,8 +2,66 @@ import 'package:flutter/foundation.dart';
 
 enum PhaseStatus { pending, inProgress, completed }
 enum TaskStatus { pending, inProgress, blocked, done }
+enum TaskPriority { low, medium, high }
 
 @immutable
+class TaskChecklistItem {
+  const TaskChecklistItem({
+    required this.id,
+    required this.label,
+    this.isDone = false,
+  });
+
+  final String id;
+  final String label;
+  final bool isDone;
+
+  TaskChecklistItem copyWith({
+    String? id,
+    String? label,
+    bool? isDone,
+  }) {
+    return TaskChecklistItem(
+      id: id ?? this.id,
+      label: label ?? this.label,
+      isDone: isDone ?? this.isDone,
+    );
+  }
+}
+
+@immutable
+class TaskCommentEntity {
+  const TaskCommentEntity({
+    required this.id,
+    required this.text,
+    required this.postedBy,
+    required this.postedById,
+    this.createdAt,
+  });
+
+  final String id;
+  final String text;
+  final String postedBy;
+  final String postedById;
+  final DateTime? createdAt;
+
+  TaskCommentEntity copyWith({
+    String? id,
+    String? text,
+    String? postedBy,
+    String? postedById,
+    DateTime? createdAt,
+  }) {
+    return TaskCommentEntity(
+      id: id ?? this.id,
+      text: text ?? this.text,
+      postedBy: postedBy ?? this.postedBy,
+      postedById: postedById ?? this.postedById,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+}
+
 @immutable
 class TimelineTaskEntity {
   final String id;
@@ -18,6 +76,10 @@ class TimelineTaskEntity {
   final DateTime? actualEnd;
   final String? assignedWorkerId;
   final String? roomId;
+  final List<TaskChecklistItem> checklistItems;
+  final List<TaskCommentEntity> comments;
+  final List<String> photoProofUrls;
+  final TaskPriority priority;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -33,9 +95,39 @@ class TimelineTaskEntity {
     this.actualEnd,
     this.assignedWorkerId,
     this.roomId,
+    this.checklistItems = const [],
+    this.comments = const [],
+    this.photoProofUrls = const [],
+    this.priority = TaskPriority.medium,
     this.createdAt,
     this.updatedAt,
   });
+
+  bool get hasStarted =>
+      status == TaskStatus.inProgress ||
+      status == TaskStatus.blocked ||
+      status == TaskStatus.done;
+
+  bool get hasChecklist => checklistItems.isNotEmpty;
+
+  int get completedChecklistCount =>
+      checklistItems.where((item) => item.isDone).length;
+
+  bool get isChecklistComplete =>
+      checklistItems.isNotEmpty &&
+      checklistItems.every((item) => item.isDone);
+
+  bool get isOverdue {
+    if (status == TaskStatus.done || plannedEnd == null) return false;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final end = DateTime(
+      plannedEnd!.year,
+      plannedEnd!.month,
+      plannedEnd!.day,
+    );
+    return end.isBefore(today);
+  }
 
   TimelineTaskEntity copyWith({
     String? id,
@@ -49,6 +141,10 @@ class TimelineTaskEntity {
     DateTime? actualEnd,
     String? assignedWorkerId,
     String? roomId,
+    List<TaskChecklistItem>? checklistItems,
+    List<TaskCommentEntity>? comments,
+    List<String>? photoProofUrls,
+    TaskPriority? priority,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -64,6 +160,10 @@ class TimelineTaskEntity {
       actualEnd: actualEnd ?? this.actualEnd,
       assignedWorkerId: assignedWorkerId ?? this.assignedWorkerId,
       roomId: roomId ?? this.roomId,
+      checklistItems: checklistItems ?? this.checklistItems,
+      comments: comments ?? this.comments,
+      photoProofUrls: photoProofUrls ?? this.photoProofUrls,
+      priority: priority ?? this.priority,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -117,6 +217,14 @@ class TimelinePhaseEntity {
     if (tasks.isEmpty) return status == PhaseStatus.completed ? 1.0 : 0.0;
     final doneCount = tasks.where((t) => t.status == TaskStatus.done).length;
     return doneCount / tasks.length;
+  }
+
+  PhaseStatus deriveStatusFromTasks() {
+    if (tasks.isEmpty) return status;
+    final doneCount = tasks.where((task) => task.status == TaskStatus.done).length;
+    if (doneCount == 0) return PhaseStatus.pending;
+    if (doneCount == tasks.length) return PhaseStatus.completed;
+    return PhaseStatus.inProgress;
   }
 
   TimelinePhaseEntity copyWith({

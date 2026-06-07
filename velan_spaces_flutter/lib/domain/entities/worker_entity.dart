@@ -7,6 +7,7 @@ class WorkerEntity {
     required this.name,
     this.phone = '',
     this.trade = '',
+    this.password = '',
     this.assignedProjects = const [],
   });
 
@@ -14,5 +15,6 @@ class WorkerEntity {
   final String name;
   final String phone;
   final String trade;
+  final String password;
   final List<String> assignedProjects;
 }

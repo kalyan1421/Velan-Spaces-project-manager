@@ -7,6 +7,8 @@ class ManagerEntity {
     required this.name,
     this.phone = '',
     this.email = '',
+    this.password = '',
+    this.isSuspended = false,
     this.assignedProjects = const [],
   });
 
@@ -14,5 +16,7 @@ class ManagerEntity {
   final String name;
   final String phone;
   final String email;
+  final String password;
+  final bool isSuspended;
   final List<String> assignedProjects;
 }

@@ -1,1 +1,61 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"velan-spaces-constructions","appId":"1:502284969422:android:c5338d34bbed3b358b779f","fileOutput":"android/app/google-services.json"}},"ios":{"default":{"projectId":"velan-spaces-constructions","appId":"1:502284969422:ios:15565c4de2a9e4958b779f","uploadDebugSymbols":false,"fileOutput":"ios/Runner/GoogleService-Info.plist"}},"dart":{"lib/firebase_options.dart":{"projectId":"velan-spaces-constructions","configurations":{"android":"1:502284969422:android:c5338d34bbed3b358b779f","ios":"1:502284969422:ios:15565c4de2a9e4958b779f"}}}}}}
+{
+  "hosting": {
+    "site": "velan-spaces-constructions",
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "velan-spaces-constructions",
+          "appId": "1:502284969422:android:c5338d34bbed3b358b779f",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "ios": {
+        "default": {
+          "projectId": "velan-spaces-constructions",
+          "appId": "1:502284969422:ios:15565c4de2a9e4958b779f",
+          "uploadDebugSymbols": false,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "velan-spaces-constructions",
+          "configurations": {
+            "android": "1:502284969422:android:c5338d34bbed3b358b779f",
+            "ios": "1:502284969422:ios:15565c4de2a9e4958b779f"
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
+    }
+  ]
+}

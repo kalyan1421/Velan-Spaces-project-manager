@@ -11,6 +11,7 @@ class SettlementModel extends SettlementEntity {
     super.paymentMethod,
     super.addedBy,
     super.createdAt,
+    super.proofUrl,
   });
 
   factory SettlementModel.fromSnapshot(DocumentSnapshot snap) {
@@ -20,10 +21,11 @@ class SettlementModel extends SettlementEntity {
       description: data['description'] ?? '',
       amount: (data['amount'] as num?)?.toDouble() ?? 0.0,
       date: data['date'] ?? '',
-      paidTo: data['paidTo'] ?? '',
-      paymentMethod: data['paymentMethod'] ?? '',
-      addedBy: data['addedBy'] ?? '',
+      paidTo: data['paidTo'] ?? data['paidToName'] ?? '',
+      paymentMethod: data['paymentMethod'] ?? data['mode'] ?? '',
+      addedBy: data['addedBy'] ?? data['createdBy'] ?? '',
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      proofUrl: data['proofUrl'] ?? '',
     );
   }
 
@@ -32,9 +34,10 @@ class SettlementModel extends SettlementEntity {
       'description': description,
       'amount': amount,
       'date': date,
-      'paidTo': paidTo,
-      'paymentMethod': paymentMethod,
-      'addedBy': addedBy,
+      'paidToName': paidTo, // Mapping to Web's paidToName
+      'mode': paymentMethod, // Mapping to Web's mode
+      'createdBy': addedBy, // Mapping to Web's createdBy
+      'proofUrl': proofUrl,
     };
   }
 }
