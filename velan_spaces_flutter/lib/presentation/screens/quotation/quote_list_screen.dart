@@ -8,6 +8,7 @@ import 'package:velan_spaces_flutter/domain/entities/quote_template_entity.dart'
 import 'package:velan_spaces_flutter/presentation/providers/quotation_providers.dart';
 import 'package:velan_spaces_flutter/presentation/screens/quotation/quote_builder_screen.dart';
 import 'package:velan_spaces_flutter/presentation/screens/quotation/quote_preview_screen.dart';
+import 'package:velan_spaces_flutter/presentation/widgets/quotation/quote_share_sheet.dart';
 
 /// Lists the quotations for a single lead/enquiry, with create / edit / delete.
 class QuoteListScreen extends ConsumerWidget {
@@ -209,6 +210,12 @@ class _QuoteCard extends ConsumerWidget {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (quote.pdfUrl.isNotEmpty)
+              const Padding(
+                padding: EdgeInsets.only(right: 6),
+                child: Icon(Icons.cloud_done_outlined,
+                    size: 16, color: Color(0xFF22C55E)),
+              ),
             Text(FormatUtils.formatCurrency(quote.grandTotal),
                 style: const TextStyle(fontWeight: FontWeight.bold)),
             PopupMenuButton<String>(
@@ -221,6 +228,8 @@ class _QuoteCard extends ConsumerWidget {
                       builder: (_) => QuotePreviewScreen(quote: quote),
                     ),
                   );
+                } else if (v == 'send') {
+                  showQuoteShareSheet(context, ref, quote);
                 } else if (v == 'status') {
                   _changeStatus(context, ref);
                 } else if (v == 'duplicate') {
@@ -241,7 +250,8 @@ class _QuoteCard extends ConsumerWidget {
                 }
               },
               itemBuilder: (_) => const [
-                PopupMenuItem(value: 'pdf', child: Text('Generate PDF')),
+                PopupMenuItem(value: 'pdf', child: Text('Preview PDF')),
+                PopupMenuItem(value: 'send', child: Text('Send to Client')),
                 PopupMenuItem(value: 'status', child: Text('Change Status')),
                 PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
                 PopupMenuItem(value: 'delete', child: Text('Delete')),

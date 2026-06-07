@@ -36,6 +36,7 @@ class QuoteBuilderScreen extends ConsumerStatefulWidget {
 class _QuoteBuilderScreenState extends ConsumerState<QuoteBuilderScreen> {
   final _name = TextEditingController();
   final _phone = TextEditingController();
+  final _email = TextEditingController();
   final _address = TextEditingController();
   final _handledBy = TextEditingController();
   final _designedBy = TextEditingController();
@@ -64,7 +65,7 @@ class _QuoteBuilderScreenState extends ConsumerState<QuoteBuilderScreen> {
   @override
   void dispose() {
     for (final c in [
-      _name, _phone, _address, _handledBy, _designedBy,
+      _name, _phone, _email, _address, _handledBy, _designedBy,
       _siteLocation, _projectType, _enquiryNo, _discount, _gst,
     ]) {
       c.dispose();
@@ -77,6 +78,7 @@ class _QuoteBuilderScreenState extends ConsumerState<QuoteBuilderScreen> {
     if (q != null) {
       _name.text = q.preparedForName;
       _phone.text = q.preparedForPhone;
+      _email.text = q.preparedForEmail;
       _address.text = q.preparedForAddress;
       _handledBy.text = q.handledBy;
       _designedBy.text = q.designedBy;
@@ -198,7 +200,9 @@ class _QuoteBuilderScreenState extends ConsumerState<QuoteBuilderScreen> {
       status: _status,
       preparedForName: _name.text.trim(),
       preparedForPhone: _phone.text.trim(),
+      preparedForEmail: _email.text.trim(),
       preparedForAddress: _address.text.trim(),
+      pdfUrl: widget.existing?.pdfUrl ?? '',
       handledBy: _handledBy.text.trim(),
       designedBy: _designedBy.text.trim(),
       date: _date,
@@ -244,7 +248,9 @@ class _QuoteBuilderScreenState extends ConsumerState<QuoteBuilderScreen> {
       status: _status,
       preparedForName: _name.text.trim(),
       preparedForPhone: _phone.text.trim(),
+      preparedForEmail: _email.text.trim(),
       preparedForAddress: _address.text.trim(),
+      pdfUrl: widget.existing?.pdfUrl ?? '',
       handledBy: _handledBy.text.trim(),
       designedBy: _designedBy.text.trim(),
       date: _date,
@@ -334,7 +340,11 @@ class _QuoteBuilderScreenState extends ConsumerState<QuoteBuilderScreen> {
                 style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             _tf(_name, 'Client name'),
-            _tf(_phone, 'Phone', keyboard: TextInputType.phone),
+            Row(children: [
+              Expanded(child: _tf(_phone, 'Phone (WhatsApp)', keyboard: TextInputType.phone)),
+              const SizedBox(width: 12),
+              Expanded(child: _tf(_email, 'Email', keyboard: TextInputType.emailAddress)),
+            ]),
             _tf(_address, 'Address', maxLines: 2),
             const Divider(height: 24),
             Row(children: [

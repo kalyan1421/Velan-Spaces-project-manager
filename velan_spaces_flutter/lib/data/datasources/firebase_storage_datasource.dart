@@ -56,6 +56,23 @@ class FirebaseStorageDatasourceImpl implements StorageDatasource {
   }
 
   @override
+  Future<String> uploadBytes(
+    Uint8List bytes,
+    String folder,
+    String fileName, {
+    String contentType = 'application/octet-stream',
+  }) async {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final ref = _storage.ref().child('$folder/${timestamp}_$fileName');
+    final metadata = SettableMetadata(
+      contentType: contentType,
+      customMetadata: {'uploadedAt': DateTime.now().toIso8601String()},
+    );
+    final snapshot = await ref.putData(bytes, metadata);
+    return await snapshot.ref.getDownloadURL();
+  }
+
+  @override
   Future<void> deleteFile(String url) async {
     try {
       final ref = _storage.refFromURL(url);

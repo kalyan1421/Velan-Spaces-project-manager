@@ -1,5 +1,8 @@
+import 'dart:typed_data';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:velan_spaces_flutter/core/services/media_compression_service.dart';
+import 'package:velan_spaces_flutter/core/services/quotation_pdf_service.dart';
 import 'package:velan_spaces_flutter/data/datasources/quotation_datasource.dart';
 import 'package:velan_spaces_flutter/data/models/catalog_item_model.dart';
 import 'package:velan_spaces_flutter/data/models/quotation_settings_model.dart';
@@ -188,4 +191,37 @@ class QuotationController extends StateNotifier<AsyncValue<void>> {
 
   Future<String> nextQuoteNumber(String prefix, int year) =>
       _ds.nextQuoteNumber(prefix, year);
+
+  /// Builds the quote PDF bytes (no upload). Useful for native share.
+  Future<Uint8List> buildPdfBytes(
+          QuoteEntity quote, QuotationSettingsEntity settings) =>
+      QuotationPdfService.build(quote: quote, settings: settings);
+
+  /// Uploads already-built PDF [bytes] to Storage and, for saved quotes, stores
+  /// the download URL + marks the quote 'sent'. Returns the hosted URL.
+  Future<String?> uploadPdfBytes(QuoteEntity quote, Uint8List bytes) async {
+    try {
+      final storage = _ref.read(storageDatasourceProvider);
+      final name = (quote.quoteNumber.isEmpty ? 'quote' : quote.quoteNumber)
+          .replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
+      final url = await storage.uploadBytes(
+        bytes,
+        'quotation/sent',
+        '$name.pdf',
+        contentType: 'application/pdf',
+      );
+      if (quote.id.isNotEmpty) {
+        final updated = quote.copyWith(
+          pdfUrl: url,
+          status: quote.status == 'draft' ? 'sent' : quote.status,
+        );
+        await _ds.updateQuote(
+            quote.leadId, quote.id, QuoteModel.fromEntity(updated));
+      }
+      return url;
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+      return null;
+    }
+  }
 }

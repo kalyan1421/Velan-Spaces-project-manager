@@ -5,6 +5,7 @@ import 'package:velan_spaces_flutter/core/services/quotation_pdf_service.dart';
 import 'package:velan_spaces_flutter/domain/entities/quotation_settings_entity.dart';
 import 'package:velan_spaces_flutter/domain/entities/quote_entity.dart';
 import 'package:velan_spaces_flutter/presentation/providers/quotation_providers.dart';
+import 'package:velan_spaces_flutter/presentation/widgets/quotation/quote_share_sheet.dart';
 
 /// Renders a quote to PDF and shows a live preview with built-in share / print /
 /// save actions (from the `printing` package).
@@ -23,6 +24,13 @@ class QuotePreviewScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(quote.quoteNumber.isEmpty ? 'Quote Preview' : quote.quoteNumber),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.send_outlined),
+            tooltip: 'Send to client',
+            onPressed: () => showQuoteShareSheet(context, ref, quote),
+          ),
+        ],
       ),
       body: settingsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),

@@ -108,7 +108,9 @@ class QuoteEntity {
     this.status = 'draft', // draft | sent | accepted | rejected
     this.preparedForName = '',
     this.preparedForPhone = '',
+    this.preparedForEmail = '',
     this.preparedForAddress = '',
+    this.pdfUrl = '',
     this.handledBy = '',
     this.designedBy = '',
     this.date,
@@ -135,7 +137,9 @@ class QuoteEntity {
   final String status;
   final String preparedForName;
   final String preparedForPhone;
+  final String preparedForEmail;
   final String preparedForAddress;
+  final String pdfUrl; // hosted copy of the last-generated PDF (client download)
   final String handledBy;
   final String designedBy;
   final DateTime? date;
@@ -162,7 +166,9 @@ class QuoteEntity {
     String? status,
     String? preparedForName,
     String? preparedForPhone,
+    String? preparedForEmail,
     String? preparedForAddress,
+    String? pdfUrl,
     String? handledBy,
     String? designedBy,
     DateTime? date,
@@ -189,7 +195,9 @@ class QuoteEntity {
       status: status ?? this.status,
       preparedForName: preparedForName ?? this.preparedForName,
       preparedForPhone: preparedForPhone ?? this.preparedForPhone,
+      preparedForEmail: preparedForEmail ?? this.preparedForEmail,
       preparedForAddress: preparedForAddress ?? this.preparedForAddress,
+      pdfUrl: pdfUrl ?? this.pdfUrl,
       handledBy: handledBy ?? this.handledBy,
       designedBy: designedBy ?? this.designedBy,
       date: date ?? this.date,
