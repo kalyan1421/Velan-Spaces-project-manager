@@ -1,5 +1,6 @@
 
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:velan_spaces_flutter/data/datasources/storage_datasource.dart';
@@ -53,6 +54,25 @@ class FirebaseStorageDatasourceImpl implements StorageDatasource {
       urls.add(await uploadFile(path, folder));
     }
     return urls;
+  }
+
+  @override
+  Future<String> uploadBytes(
+    Uint8List bytes,
+    String folder,
+    String fileName, {
+    String contentType = 'application/octet-stream',
+  }) async {
+    // Sanitize fileName to prevent path traversal / injection
+    final safeName = fileName.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final ref = _storage.ref().child('$folder/${timestamp}_$safeName');
+    final metadata = SettableMetadata(
+      contentType: contentType,
+      customMetadata: {'uploadedAt': DateTime.now().toIso8601String()},
+    );
+    final snapshot = await ref.putData(bytes, metadata);
+    return await snapshot.ref.getDownloadURL();
   }
 
   @override

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:velan_spaces_flutter/domain/entities/lead_entity.dart';
 import 'package:velan_spaces_flutter/presentation/providers/lead_providers.dart';
@@ -567,6 +568,26 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                 ],
 
                 const SizedBox(height: 24),
+
+                // Quotations — build/auto-price proposals for this enquiry
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      context.push(
+                          '/lead/${lead.id}/quotes?name=${Uri.encodeComponent(lead.clientName)}');
+                    },
+                    icon: const Icon(Icons.request_quote_outlined),
+                    label: const Text('Quotations'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
 
                 // Convert to Project button (only for 'won' status)
                 if (lead.status == 'won')

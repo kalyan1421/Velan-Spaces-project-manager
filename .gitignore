@@ -41,5 +41,8 @@ Velan-Spaces-project-manager-1/
 # Local docs (not part of the app)
 *.docx
 *.pem
+*.md
+VelanSpaces_*.html
+"Velan Spaces*.md"
 
 
