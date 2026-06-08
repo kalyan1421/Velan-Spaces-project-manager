@@ -45,10 +45,8 @@ class FCMService {
     required String userId,
     required void Function(String projectId) onNotificationTap,
   }) async {
-    // ─── 1. Background handler ─────────────────────────────────────────
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-
-    // ─── 2. Request OS permission ──────────────────────────────────────
+    // ─── 1. Request OS permission ──────────────────────────────────────
+    // Note: onBackgroundMessage is registered once in main.dart (top-level)
     final settings = await _fcm.requestPermission(
       alert: true,
       announcement: false,
