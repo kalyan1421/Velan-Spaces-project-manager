@@ -26,4 +26,7 @@ npm-debug.log*
 # Cache
 .cache/
 
+# Separate project repos (not submodules)
+vaarshi_interiors_project/
+
 

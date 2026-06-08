@@ -50,10 +50,10 @@
 		<string>Velan Spaces needs permission to save construction site photos and project media to your photo library.</string>
 		<key>NSPhotoLibraryUsageDescription</key>
 		<string>Velan Spaces needs access to your photo library to allow you to select and upload construction site progress photos and videos to project timelines.</string>
-		<key>NSUserNotificationUsageDescription</key>
-		<string>Velan Spaces sends notifications for project updates, new assignments, and settlement approvals to keep you in sync with your team.</string>
-		<key>FirebaseAppDelegateProxyEnabled</key>
-		<false/>
+		<key>UIBackgroundModes</key>
+		<array>
+			<string>remote-notification</string>
+		</array>
 		<key>UIApplicationSceneManifest</key>
 		<dict>
 			<key>UIApplicationSupportsMultipleScenes</key>
