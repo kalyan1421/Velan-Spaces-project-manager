@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -258,12 +259,16 @@ class _AddExpenseDialogState extends ConsumerState<AddExpenseDialog> {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: LayoutBuilder(
-                      builder: (context, constraints) => Image.file(
-                        File(_proofImage!.path),
-                        height: 120,
-                        width: constraints.maxWidth,
-                        fit: BoxFit.cover,
-                      ),
+                      builder: (context, constraints) => kIsWeb
+                          ? Image.network(
+                              _proofImage!.path,
+                              height: 120, width: constraints.maxWidth, fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const Icon(Icons.image, size: 48),
+                            )
+                          : Image.file(
+                              File(_proofImage!.path),
+                              height: 120, width: constraints.maxWidth, fit: BoxFit.cover,
+                            ),
                     ),
                   ),
                 ],
