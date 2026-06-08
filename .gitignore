@@ -29,4 +29,17 @@ npm-debug.log*
 # Separate project repos (not submodules)
 vaarshi_interiors_project/
 
+# Firebase service account keys and certificates — add to GitHub Secrets instead
+*-firebase-adminsdk-*.json
+upload_certificate.pem
+google-services.json
+GoogleService-Info.plist
+
+# Old prototype (tracked separately)
+Velan-Spaces-project-manager-1/
+
+# Local docs (not part of the app)
+*.docx
+*.pem
+
 
