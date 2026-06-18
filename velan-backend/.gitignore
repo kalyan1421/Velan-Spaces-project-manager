@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+dist/
+build/
+
+# Env & secrets — NEVER commit
+.env
+.env.*
+!.env.example
+*.pem
+service-account*.json
+firebase-admin*.json
+
+# Supabase local
+supabase/.branches
+supabase/.temp
+supabase/.env
+
+# ETL export output (may contain production data)
+scripts/etl/data/
+
+# Logs / OS
+*.log
+.DS_Store
