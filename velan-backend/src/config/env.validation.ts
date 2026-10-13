@@ -19,7 +19,20 @@ export const envSchema = z.object({
   SUPABASE_JWT_SECRET: z.string().optional(),
 
   DATABASE_URL: z.string().optional(),
+
+  // Push (FCM). Provide EITHER a file path (local dev) OR the JSON / base64
+  // JSON inline (PaaS hosts like Render/Railway have no persistent file).
   FIREBASE_SERVICE_ACCOUNT_PATH: z.string().optional(),
+  FIREBASE_SERVICE_ACCOUNT_JSON: z.string().optional(),
+
+  // Comma-separated browser origins allowed by CORS (the Flutter web build).
+  // Native mobile apps do not need CORS. In production, unset = CORS disabled.
+  CORS_ORIGINS: z.string().optional(),
+  // Swagger UI at /docs. Defaults to on in dev, off in production.
+  ENABLE_SWAGGER: z.enum(['true', 'false']).optional(),
+  // Number of reverse-proxy hops in front of the app (Render/Railway = 1) so
+  // rate limiting sees the real client IP.
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(0),
 });
 
 export type Env = z.infer<typeof envSchema>;

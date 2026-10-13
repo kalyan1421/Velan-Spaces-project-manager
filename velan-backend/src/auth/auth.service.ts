@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
 import {
   AppRole,
@@ -22,6 +26,9 @@ export class AuthService {
 
     const user = await this.resolveUser(data.user.id);
     if (!user) throw new UnauthorizedException('User profile not found');
+    if (user.isSuspended) {
+      throw new ForbiddenException('Account suspended. Contact the administrator.');
+    }
 
     return {
       accessToken: data.session.access_token,
@@ -37,8 +44,14 @@ export class AuthService {
       .anon()
       .auth.refreshSession({ refresh_token: refreshToken });
 
-    if (error || !data.session) {
+    if (error || !data.session || !data.user) {
       throw new UnauthorizedException('Invalid refresh token');
+    }
+    // A suspended user must not be able to keep a session alive via refresh.
+    const user = await this.resolveUser(data.user.id);
+    if (!user) throw new UnauthorizedException('User profile not found');
+    if (user.isSuspended) {
+      throw new ForbiddenException('Account suspended. Contact the administrator.');
     }
     return {
       accessToken: data.session.access_token,
@@ -53,7 +66,7 @@ export class AuthService {
     const { data, error } = await this.supabase
       .admin()
       .from('users')
-      .select('id, email, role, display_name')
+      .select('id, email, role, display_name, is_suspended')
       .eq('id', authId)
       .maybeSingle();
 
@@ -63,6 +76,7 @@ export class AuthService {
       email: data.email ?? null,
       role: data.role as AppRole,
       displayName: data.display_name ?? null,
+      isSuspended: data.is_suspended === true,
     };
   }
 }

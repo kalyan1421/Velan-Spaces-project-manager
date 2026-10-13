@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -173,7 +174,7 @@ class NotificationsController {
   }
 
   @Patch('notifications/:id/read')
-  markRead(@CurrentUser() u: AuthenticatedUser, @Param('id') id: string) {
+  markRead(@CurrentUser() u: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.svc.markRead(u, id);
   }
 

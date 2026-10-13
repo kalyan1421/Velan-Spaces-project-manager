@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../common/types/authenticated-user';
@@ -11,7 +12,9 @@ import { LoginDto, RefreshDto } from './dto/login.dto';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  // Brute-force protection: 8 attempts / minute / IP.
   @Public()
+  @Throttle({ default: { limit: 8, ttl: 60_000 } })
   @Post('login')
   @ApiOperation({ summary: 'Email + password login' })
   login(@Body() dto: LoginDto) {
@@ -19,6 +22,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Post('refresh')
   @ApiOperation({ summary: 'Exchange a refresh token for a new session' })
   refresh(@Body() dto: RefreshDto) {

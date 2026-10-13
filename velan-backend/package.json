@@ -24,10 +24,12 @@
     "@nestjs/core": "^10.4.4",
     "@nestjs/platform-express": "^10.4.4",
     "@nestjs/swagger": "^7.4.2",
+    "@nestjs/throttler": "^6.5.0",
     "@supabase/supabase-js": "^2.45.4",
-    "firebase-admin": "^12.5.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "firebase-admin": "^12.5.0",
+    "helmet": "^7.2.0",
     "jose": "^5.9.6",
     "jsonwebtoken": "^9.0.2",
     "reflect-metadata": "^0.2.2",
@@ -49,9 +51,16 @@
     "typescript": "^5.6.2"
   },
   "jest": {
-    "moduleFileExtensions": ["js", "json", "ts"],
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
     "rootDir": ".",
-    "roots": ["<rootDir>/src", "<rootDir>/scripts"],
+    "roots": [
+      "<rootDir>/src",
+      "<rootDir>/scripts"
+    ],
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
       "^.+\\.ts$": "ts-jest"

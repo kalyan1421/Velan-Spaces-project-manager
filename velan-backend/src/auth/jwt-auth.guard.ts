@@ -1,6 +1,7 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -50,6 +51,10 @@ export class JwtAuthGuard implements CanActivate {
     try {
       ({ payload } = await jwtVerify(token, this.jwks, {
         issuer: this.issuer,
+        // Supabase user tokens carry aud=authenticated; reject anything else
+        // (e.g. anon/service tokens) and pin the asymmetric algorithms.
+        audience: 'authenticated',
+        algorithms: ['ES256', 'RS256', 'EdDSA'],
       }));
     } catch {
       throw new UnauthorizedException('Invalid or expired token');
@@ -57,6 +62,9 @@ export class JwtAuthGuard implements CanActivate {
 
     const user = await this.authService.resolveUser(payload.sub as string);
     if (!user) throw new UnauthorizedException('User not found');
+    if (user.isSuspended) {
+      throw new ForbiddenException('Account suspended. Contact the administrator.');
+    }
 
     (req as Request & { user: unknown }).user = user;
     return true;

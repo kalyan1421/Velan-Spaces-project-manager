@@ -6,17 +6,24 @@ import {
 } from '@nestjs/common';
 import { SupabaseService } from '../../supabase/supabase.service';
 import { AuthenticatedUser } from '../../common/types/authenticated-user';
+import { ProjectAccessService } from '../../common/services/project-access.service';
+import { sanitizeProject } from '../../common/project-view';
 import { CreateProjectDto, UpdateProjectDto } from './dto/project.dto';
 
 /**
- * Reference module. Demonstrates the role-scoped access pattern the other
- * domain modules (updates, designs, budget, …) will follow:
+ * Reference module for the role-scoped access pattern:
  *  - head sees everything
  *  - manager/worker/client see only projects they belong to (project_members)
+ *  - money fields (budget / estimate / spend) are returned only to head and to
+ *    managers with budget access on that project; client contact details are
+ *    hidden from workers and clients (see common/project-view.ts).
  */
 @Injectable()
 export class ProjectsService {
-  constructor(private readonly supabase: SupabaseService) {}
+  constructor(
+    private readonly supabase: SupabaseService,
+    private readonly access: ProjectAccessService,
+  ) {}
 
   private db() {
     return this.supabase.admin();
@@ -29,17 +36,14 @@ export class ProjectsService {
         .select('*')
         .order('created_at', { ascending: false });
       if (error) throw new Error(error.message);
-      return data;
+      return (data ?? []).map((p) =>
+        sanitizeProject(p, { role: user.role, canSeeBudget: true }),
+      );
     }
 
     // Non-head: only projects the user is a member of.
-    const { data: memberships, error: mErr } = await this.db()
-      .from('project_members')
-      .select('project_id')
-      .eq('user_id', user.id);
-    if (mErr) throw new Error(mErr.message);
-
-    const ids = (memberships ?? []).map((m) => m.project_id);
+    const memberships = await this.access.membershipMap(user);
+    const ids = [...memberships.keys()];
     if (ids.length === 0) return [];
 
     const { data, error } = await this.db()
@@ -48,11 +52,16 @@ export class ProjectsService {
       .in('id', ids)
       .order('created_at', { ascending: false });
     if (error) throw new Error(error.message);
-    return data;
+    return (data ?? []).map((p) =>
+      sanitizeProject(p, {
+        role: user.role,
+        canSeeBudget: user.role === 'manager' && memberships.get(p.id) === true,
+      }),
+    );
   }
 
   async findOne(user: AuthenticatedUser, id: string) {
-    await this.assertCanAccess(user, id);
+    await this.access.assertMember(user, id);
     const { data, error } = await this.db()
       .from('projects')
       .select('*')
@@ -60,10 +69,13 @@ export class ProjectsService {
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) throw new NotFoundException('Project not found');
-    return data;
+    return sanitizeProject(data, {
+      role: user.role,
+      canSeeBudget: await this.access.hasBudgetAccess(user, id),
+    });
   }
 
-  async create(dto: CreateProjectDto) {
+  async create(user: AuthenticatedUser, dto: CreateProjectDto) {
     const { data, error } = await this.db()
       .from('projects')
       .insert({
@@ -86,11 +98,36 @@ export class ProjectsService {
       }
       throw new Error(error.message);
     }
-    return data;
+
+    // A manager who creates a project must be able to open it afterwards
+    // (head sees everything and needs no membership row). They entered the
+    // budget, so they keep budget access on it.
+    if (user.role === 'manager') {
+      const { error: mErr } = await this.db().from('project_members').insert({
+        project_id: data.id,
+        user_id: user.id,
+        member_role: 'manager',
+        has_budget_access: true,
+      });
+      if (mErr) {
+        // Do not leave an orphan project the creator cannot access.
+        await this.db().from('projects').delete().eq('id', data.id);
+        throw new Error(mErr.message);
+      }
+    }
+    return sanitizeProject(data, { role: user.role, canSeeBudget: true });
   }
 
   async update(user: AuthenticatedUser, id: string, dto: UpdateProjectDto) {
-    await this.assertCanAccess(user, id);
+    await this.access.assertMember(user, id);
+
+    const touchesMoney =
+      dto.budget !== undefined || dto.estimatedCost !== undefined;
+    const canSeeBudget = await this.access.hasBudgetAccess(user, id);
+    if (touchesMoney && !canSeeBudget) {
+      throw new ForbiddenException('No budget access for this project');
+    }
+
     const patch: Record<string, unknown> = {};
     if (dto.projectName !== undefined) patch.project_name = dto.projectName;
     if (dto.clientName !== undefined) patch.client_name = dto.clientName;
@@ -110,7 +147,7 @@ export class ProjectsService {
       .select()
       .single();
     if (error) throw new Error(error.message);
-    return data;
+    return sanitizeProject(data, { role: user.role, canSeeBudget });
   }
 
   async remove(id: string) {
@@ -118,18 +155,5 @@ export class ProjectsService {
     const { error } = await this.db().from('projects').delete().eq('id', id);
     if (error) throw new Error(error.message);
     return { deleted: true };
-  }
-
-  /** head bypasses; others must have a project_members row. */
-  private async assertCanAccess(user: AuthenticatedUser, projectId: string) {
-    if (user.role === 'head') return;
-    const { data, error } = await this.db()
-      .from('project_members')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('project_id', projectId)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    if (!data) throw new ForbiddenException('Not a member of this project');
   }
 }

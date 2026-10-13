@@ -36,9 +36,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
         message = (b.message as string | string[]) ?? exception.message;
         details = b.details ?? undefined;
       }
-    } else if (exception instanceof Error) {
-      message = exception.message;
     }
+    // Any non-HttpException (DB/PostgREST errors, bugs) keeps the generic
+    // message: its text can expose table/column names and is logged below.
 
     if (status >= 500) {
       this.logger.error(

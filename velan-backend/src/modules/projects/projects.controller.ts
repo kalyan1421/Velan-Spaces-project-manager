@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
 } from '@nestjs/common';
@@ -28,15 +29,18 @@ export class ProjectsController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a project by id (membership-checked)' })
-  findOne(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+  findOne(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.projects.findOne(user, id);
   }
 
   @Post()
   @Roles('head', 'manager')
   @ApiOperation({ summary: 'Create a project (head/manager)' })
-  create(@Body() dto: CreateProjectDto) {
-    return this.projects.create(dto);
+  create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateProjectDto) {
+    return this.projects.create(user, dto);
   }
 
   @Patch(':id')
@@ -44,7 +48,7 @@ export class ProjectsController {
   @ApiOperation({ summary: 'Update a project (head/manager)' })
   update(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateProjectDto,
   ) {
     return this.projects.update(user, id, dto);
@@ -53,7 +57,7 @@ export class ProjectsController {
   @Delete(':id')
   @Roles('head')
   @ApiOperation({ summary: 'Delete a project and its children (head only)' })
-  remove(@Param('id') id: string) {
+  remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.projects.remove(id);
   }
 }
