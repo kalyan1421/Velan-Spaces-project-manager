@@ -1,0 +1,111 @@
+# Velan Spaces — production stack for one Linux server (Docker Compose v2.24+).
+#
+# Supabase (Postgres + Auth + Storage) is EXTERNAL and is NOT started here:
+# use Supabase Cloud or the client's own self-hosted Supabase. See deploy/DEPLOYMENT.md.
+#
+#   cp deploy/compose.env.example .env           # compose variables (no secrets)
+#   cp velan-backend/.env.example velan-backend/.env && chmod 600 velan-backend/.env   # API secrets
+#   docker compose build
+#   docker compose up -d                          # api + web on 127.0.0.1 only
+#   docker compose --profile proxy up -d          # + Caddy (automatic HTTPS on :80/:443)
+#
+# No secrets are written in this file. API secrets come from API_ENV_FILE; the web
+# app has no secrets (it only knows the API's internal URL and its own public URL).
+
+name: velan
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  api:
+    build:
+      context: ./velan-backend
+    image: ${IMAGE_PREFIX:-velan}/api:${IMAGE_TAG:-latest}
+    env_file:
+      - path: ${API_ENV_FILE:-./velan-backend/.env}
+        required: true
+    environment:
+      # Pinned here so a dev-style .env can't switch the container to dev mode
+      # (permissive CORS, Swagger on) or move the port the web app expects.
+      NODE_ENV: production
+      PORT: "3000"
+    # Published on loopback only: the internet reaches the API through the reverse
+    # proxy (Docker-published ports bypass host firewalls like ufw). Set BIND_ADDR
+    # only if a proxy on another machine must reach it.
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:${API_PORT:-3000}:3000"
+    # FCM: prefer FIREBASE_SERVICE_ACCOUNT_JSON (base64) in the env file. To use a
+    # key file instead, mount it read-only and set FIREBASE_SERVICE_ACCOUNT_PATH=/run/secrets/firebase-admin.json
+    # volumes:
+    #   - /etc/velan/firebase-admin.json:/run/secrets/firebase-admin.json:ro
+    read_only: true          # the API never writes to its filesystem
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    logging: *default-logging
+    # Healthcheck comes from the image: GET /api/v1/health every 30s.
+
+  web:
+    build:
+      context: ./velan-web
+      args:
+        # Build-time values (baked into the image; rebuild after changing them).
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-${APP_URL:-}}
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
+        IMAGE_REMOTE_HOSTS: ${IMAGE_REMOTE_HOSTS:-}
+        IMAGE_ALLOW_LOCAL_IP: ${IMAGE_ALLOW_LOCAL_IP:-}
+    image: ${IMAGE_PREFIX:-velan}/web:${IMAGE_TAG:-latest}
+    environment:
+      # Server-side only: the browser never calls the API directly (BFF pattern),
+      # so this stays on the internal Docker network. Must match the API's API_PREFIX.
+      API_URL: http://api:3000/api/v1
+      APP_URL: ${APP_URL:?Set APP_URL (public https URL of the web app) in .env}
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:${WEB_PORT:-3100}:3100"
+    volumes:
+      - web_cache:/app/.next/cache   # ISR / optimized-image cache survives restarts
+    depends_on:
+      api:
+        condition: service_healthy
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    logging: *default-logging
+
+  # Optional TLS-terminating reverse proxy. Enable with `--profile proxy`, or skip it
+  # and use your own proxy (deploy/nginx.conf) pointed at 127.0.0.1:3100 / :3000.
+  proxy:
+    image: caddy:2-alpine
+    profiles: [proxy]
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:-}
+      API_DOMAIN: ${API_DOMAIN:-}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data       # certificates + ACME account — back this up
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *default-logging
+
+volumes:
+  web_cache:
+  caddy_data:
+  caddy_config:

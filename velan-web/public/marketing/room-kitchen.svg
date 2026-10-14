@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 360" fill="none" stroke="#1A1A2E" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <title>Line drawing of a modular kitchen: wall cabinets, hood, counter and base units</title>
+  <defs>
+    <linearGradient id="glow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFE566" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#FFE566" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <polygon points="72,134 268,134 284,196 56,196" fill="url(#glow)" stroke="none"/>
+  <circle cx="404" cy="104" r="20" fill="#FFE566" stroke="none"/>
+  <path d="M372 70 H436 V150 H372 Z M404 70 V150 M372 110 H436"/>
+  <path d="M30 320 H450"/>
+  <path d="M70 70 H270 V132 H70 Z M120 70 V132 M170 70 V132 M220 70 V132 M114 116 V126 M126 116 V126 M214 116 V126 M226 116 V126"/>
+  <path d="M306 52 H334 V100 H306 Z M296 100 H344 L364 132 H276 Z"/>
+  <path d="M52 198 H392 V208 H52 Z"/>
+  <path d="M60 208 V320 M384 208 V320 M140 208 V320 M222 208 V320 M304 208 V320 M222 244 H304 M222 280 H304"/>
+  <path d="M253 226 H273 M253 262 H273 M253 300 H273 M128 226 V246 M152 226 V246 M316 226 V246"/>
+  <path d="M296 198 V180 H344 V198 M296 186 H286 M344 186 H354 M300 180 Q320 170 340 180 M320 173 V169"/>
+  <path d="M96 198 V182 Q96 174 104 174 H122 Q130 174 130 182 V198 M96 186 L86 178 M106 174 Q113 162 120 174"/>
+</svg>

@@ -24,6 +24,7 @@ import { ChatComplaintsModule } from './modules/chat-complaints/chat-complaints.
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { AccountsModule } from './modules/accounts/accounts.module';
+import { WebsiteModule } from './modules/website/website.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { AccountsModule } from './modules/accounts/accounts.module';
     NotificationsModule,
     StaffModule,
     AccountsModule,
+    WebsiteModule,
   ],
   providers: [
     // Throttle first (cheap), then auth (sets req.user), then role enforcement.

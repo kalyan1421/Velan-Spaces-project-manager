@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 360" fill="none" stroke="#1A1A2E" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <title>Line drawing of renovation work: exposed brick, a fresh stripe of paint, roller, ladder and paint bucket</title>
+  <rect x="212" y="70" width="58" height="160" rx="3" fill="#FFE566" stroke="none"/>
+  <path d="M30 320 H450"/>
+  <path stroke-width="2" stroke-opacity="0.6" d="M48 60 H196 M48 88 H186 M48 116 H164 M48 144 H132 M48 172 H96 M84 60 V88 M124 60 V88 M164 60 V88 M64 88 V116 M104 88 V116 M144 88 V116 M84 116 V144 M124 116 V144 M64 144 V172"/>
+  <path d="M206 232 H276 Q282 232 282 240 Q282 248 276 248 H206 Q200 248 200 240 Q200 232 206 232 Z M282 240 H294 V264 H241 V276 M236 276 H246 V316 H236 Z"/>
+  <path d="M346 320 L388 96 M378 320 L420 96 M352 290 H384 M359 250 H391 M367 210 H399 M374 170 H406 M382 130 H414"/>
+  <path d="M72 270 H132 L128 320 H76 Z M68 270 H136 M76 270 Q102 238 128 270"/>
+  <path d="M92 271 V286 Q96 293 100 286 V271 Z" fill="#FFE566" stroke="none"/>
+</svg>

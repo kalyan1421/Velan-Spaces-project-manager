@@ -1,0 +1,66 @@
+# Velan Spaces — Caddy reverse proxy (automatic HTTPS via Let's Encrypt / ZeroSSL).
+#
+# Used by `docker compose --profile proxy up -d`; upstreams are the compose
+# service names. For Caddy installed on the host instead, replace web:3100 and
+# api:3000 with 127.0.0.1:3100 and 127.0.0.1:3000.
+#
+# Env (set in the compose .env):  SITE_DOMAIN  API_DOMAIN  ACME_EMAIL
+# All three are required; an empty value makes Caddy refuse to start (loud, on purpose).
+# DNS for both names must already point at this server, and ports 80 + 443 must be open.
+
+{
+	email {$ACME_EMAIL}
+
+	# Only if a CDN / cloud load balancer sits IN FRONT of Caddy: list its IP ranges
+	# so {client_ip} resolves to the real visitor instead of the CDN edge.
+	# TODO(client): fill in or leave commented when Caddy is the internet edge.
+	# servers {
+	# 	trusted_proxies static <cidr> <cidr>
+	# 	client_ip_headers X-Forwarded-For
+	# }
+}
+
+# --- Web app (public site, staff app, client portal, /api/bff) ----------------
+{$SITE_DOMAIN} {
+	# File bytes go straight to Supabase Storage via signed URLs; only JSON passes here.
+	request_body {
+		max_size 10MB
+	}
+
+	reverse_proxy web:3100 {
+		# Exactly ONE address (the real client) — never the client-supplied chain.
+		# The web BFF forwards it to the API, which trusts 1 hop (TRUST_PROXY_HOPS=1).
+		header_up X-Forwarded-For {client_ip}
+		# Stream React Server Component / Suspense responses without buffering.
+		flush_interval -1
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
+
+# Optional: redirect www to the apex. TODO(client): enable if www is in DNS.
+# www.{$SITE_DOMAIN} {
+# 	redir https://{$SITE_DOMAIN}{uri} permanent
+# }
+
+# --- API for the mobile apps (and the Flutter web build) ------------------------
+# Remove this block if the API must not be reachable from the internet.
+{$API_DOMAIN} {
+	request_body {
+		max_size 10MB
+	}
+
+	encode zstd gzip
+
+	reverse_proxy api:3000 {
+		header_up X-Forwarded-For {client_ip}
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
