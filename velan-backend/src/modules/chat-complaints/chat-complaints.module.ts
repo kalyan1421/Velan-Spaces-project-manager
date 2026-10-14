@@ -5,6 +5,7 @@ import {
   Injectable,
   Module,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -16,10 +17,12 @@ import {
   ApiPropertyOptional,
   ApiTags,
 } from '@nestjs/swagger';
-import { IsArray, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { SupabaseService } from '../../supabase/supabase.service';
 import { ProjectAccessService } from '../../common/services/project-access.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { parsePagination } from '../../common/pagination';
 import { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { NotificationsService } from '../notifications/notifications.module';
 
@@ -45,6 +48,20 @@ class ComplaintDto {
   @IsArray()
   @IsString({ each: true })
   attachments?: string[];
+}
+
+export const COMPLAINT_STATUSES = ['open', 'inProgress', 'resolved', 'closed'] as const;
+
+class UpdateComplaintDto {
+  @ApiProperty({ enum: COMPLAINT_STATUSES })
+  @IsIn(COMPLAINT_STATUSES as unknown as string[])
+  status!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  resolutionNote?: string;
 }
 
 // ---------------------------------------------------------------- Service
@@ -128,11 +145,13 @@ class ChatComplaintsService {
     if (error) throw new Error(error.message);
 
     // Fire-and-forget: alert project managers + heads.
-    void this.notifications.notifyProjectStaff(projectId, {
-      title: 'New complaint raised',
-      body: dto.title,
-      type: 'complaint',
-    });
+    this.notifications
+      .notifyProjectStaff(projectId, {
+        title: 'New complaint raised',
+        body: dto.title,
+        type: 'complaint',
+      })
+      .catch(() => undefined); // never let a notification failure break the request
     return data;
   }
 
@@ -170,22 +189,18 @@ class ChatComplaintsController {
   @ApiOperation({ summary: 'List chat messages (paginated, newest first)' })
   listMessages(
     @CurrentUser() u: AuthenticatedUser,
-    @Param('projectId') p: string,
+    @Param('projectId', ParseUUIDPipe) p: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ) {
-    return this.svc.listMessages(
-      u,
-      p,
-      limit ? Number(limit) : undefined,
-      offset ? Number(offset) : undefined,
-    );
+    const page = parsePagination(limit, offset);
+    return this.svc.listMessages(u, p, page.limit, page.offset);
   }
 
   @Post('chat')
   sendMessage(
     @CurrentUser() u: AuthenticatedUser,
-    @Param('projectId') p: string,
+    @Param('projectId', ParseUUIDPipe) p: string,
     @Body() dto: MessageDto,
   ) {
     return this.svc.sendMessage(u, p, dto);
@@ -194,7 +209,7 @@ class ChatComplaintsController {
   @Get('complaints')
   listComplaints(
     @CurrentUser() u: AuthenticatedUser,
-    @Param('projectId') p: string,
+    @Param('projectId', ParseUUIDPipe) p: string,
   ) {
     return this.svc.listComplaints(u, p);
   }
@@ -202,19 +217,21 @@ class ChatComplaintsController {
   @Post('complaints')
   createComplaint(
     @CurrentUser() u: AuthenticatedUser,
-    @Param('projectId') p: string,
+    @Param('projectId', ParseUUIDPipe) p: string,
     @Body() dto: ComplaintDto,
   ) {
     return this.svc.createComplaint(u, p, dto);
   }
 
+  // Only staff resolve complaints; clients/workers can raise them, not close them.
   @Patch('complaints/:id')
-  @ApiOperation({ summary: 'Update complaint status / resolution' })
+  @Roles('head', 'manager')
+  @ApiOperation({ summary: 'Update complaint status / resolution (head/manager)' })
   updateComplaint(
     @CurrentUser() u: AuthenticatedUser,
-    @Param('projectId') p: string,
-    @Param('id') id: string,
-    @Body() body: { status: string; resolutionNote?: string },
+    @Param('projectId', ParseUUIDPipe) p: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateComplaintDto,
   ) {
     return this.svc.updateComplaintStatus(
       u,

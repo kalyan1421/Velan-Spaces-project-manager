@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsIn, IsString } from 'class-validator';
+import { IsIn, IsString, MaxLength, MinLength } from 'class-validator';
 
 export const STORAGE_BUCKETS = [
   'project-files',
@@ -14,8 +14,10 @@ export class SignUploadDto {
   @IsIn(STORAGE_BUCKETS as unknown as string[])
   bucket!: string;
 
-  @ApiProperty({ example: 'projects/<id>/updates/photo.jpg' })
+  @ApiProperty({ example: 'projects/<projectId>/updates/photo.jpg' })
   @IsString()
+  @MinLength(1)
+  @MaxLength(300)
   path!: string;
 }
 

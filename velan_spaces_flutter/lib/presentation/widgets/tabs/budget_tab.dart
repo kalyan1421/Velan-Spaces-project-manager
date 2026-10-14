@@ -88,6 +88,7 @@ class BudgetTab extends ConsumerWidget {
                                 'Budget Health',
                                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                                   fontWeight: FontWeight.bold,
+                                  color: VelanTheme.textPrimary,
                                 ),
                               ),
                               Container(
@@ -158,7 +159,7 @@ class BudgetTab extends ConsumerWidget {
                             children: [
                               _buildSummaryCard(context, 'Income', income, VelanTheme.success, Icons.arrow_downward),
                               const SizedBox(width: 12),
-                              _buildSummaryCard(context, 'Remaining', budgetRemaining, VelanTheme.accentBright, Icons.account_balance_wallet_outlined),
+                              _buildSummaryCard(context, 'Remaining', budgetRemaining, VelanTheme.highlight, Icons.account_balance_wallet_outlined),
                             ],
                           ),
                         ],

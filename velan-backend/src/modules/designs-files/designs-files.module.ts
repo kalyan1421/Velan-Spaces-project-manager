@@ -6,6 +6,7 @@ import {
   Injectable,
   Module,
   Param,
+  ParseUUIDPipe,
   Post,
 } from '@nestjs/common';
 import {
@@ -18,6 +19,7 @@ import { IsBoolean, IsInt, IsOptional, IsString } from 'class-validator';
 import { SupabaseService } from '../../supabase/supabase.service';
 import { ProjectAccessService } from '../../common/services/project-access.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { AuthenticatedUser } from '../../common/types/authenticated-user';
 
 // ---------------------------------------------------------------- DTOs
@@ -152,50 +154,54 @@ class DesignsFilesController {
 
   @Get('designs')
   @ApiOperation({ summary: 'List designs' })
-  listDesigns(@CurrentUser() u: AuthenticatedUser, @Param('projectId') p: string) {
+  listDesigns(@CurrentUser() u: AuthenticatedUser, @Param('projectId', ParseUUIDPipe) p: string) {
     return this.svc.listDesigns(u, p);
   }
 
   @Post('designs')
+  @Roles('head', 'manager')
   @ApiOperation({ summary: 'Add a design document' })
   createDesign(
     @CurrentUser() u: AuthenticatedUser,
-    @Param('projectId') p: string,
+    @Param('projectId', ParseUUIDPipe) p: string,
     @Body() dto: CreateDesignDto,
   ) {
     return this.svc.createDesign(u, p, dto);
   }
 
   @Delete('designs/:id')
+  @Roles('head', 'manager')
   removeDesign(
     @CurrentUser() u: AuthenticatedUser,
-    @Param('projectId') p: string,
-    @Param('id') id: string,
+    @Param('projectId', ParseUUIDPipe) p: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.svc.removeDesign(u, p, id);
   }
 
   @Get('files')
   @ApiOperation({ summary: 'List files' })
-  listFiles(@CurrentUser() u: AuthenticatedUser, @Param('projectId') p: string) {
+  listFiles(@CurrentUser() u: AuthenticatedUser, @Param('projectId', ParseUUIDPipe) p: string) {
     return this.svc.listFiles(u, p);
   }
 
   @Post('files')
+  @Roles('head', 'manager')
   @ApiOperation({ summary: 'Register an uploaded file' })
   createFile(
     @CurrentUser() u: AuthenticatedUser,
-    @Param('projectId') p: string,
+    @Param('projectId', ParseUUIDPipe) p: string,
     @Body() dto: CreateFileDto,
   ) {
     return this.svc.createFile(u, p, dto);
   }
 
   @Delete('files/:id')
+  @Roles('head', 'manager')
   removeFile(
     @CurrentUser() u: AuthenticatedUser,
-    @Param('projectId') p: string,
-    @Param('id') id: string,
+    @Param('projectId', ParseUUIDPipe) p: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.svc.removeFile(u, p, id);
   }

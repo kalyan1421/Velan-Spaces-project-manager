@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Query,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -88,13 +89,13 @@ class StaffController {
 
   @Get(':id/assignments')
   @ApiOperation({ summary: 'Projects a staff member is assigned to' })
-  assignments(@Param('id') id: string) {
+  assignments(@Param('id', ParseUUIDPipe) id: string) {
     return this.svc.assignments(id);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Edit / suspend a staff member' })
-  update(@Param('id') id: string, @Body() dto: UpdateStaffDto) {
+  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateStaffDto) {
     return this.svc.update(id, dto);
   }
 }

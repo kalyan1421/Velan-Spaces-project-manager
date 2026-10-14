@@ -8,6 +8,7 @@ import {
   Patch,
   Post,
   Put,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -205,7 +206,7 @@ class SalesController {
     return this.svc.createLead(dto);
   }
   @Patch('leads/:id')
-  updateLead(@Param('id') id: string, @Body() dto: LeadDto) {
+  updateLead(@Param('id', ParseUUIDPipe) id: string, @Body() dto: LeadDto) {
     return this.svc.updateLead(id, dto);
   }
 

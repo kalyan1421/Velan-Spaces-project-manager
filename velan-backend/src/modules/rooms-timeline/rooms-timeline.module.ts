@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -159,7 +160,7 @@ class RoomsTimelineController {
   constructor(private readonly svc: RoomsTimelineService) {}
 
   @Get('rooms')
-  listRooms(@CurrentUser() u: AuthenticatedUser, @Param('projectId') p: string) {
+  listRooms(@CurrentUser() u: AuthenticatedUser, @Param('projectId', ParseUUIDPipe) p: string) {
     return this.svc.listRooms(u, p);
   }
 
@@ -167,7 +168,7 @@ class RoomsTimelineController {
   @Roles('head', 'manager')
   createRoom(
     @CurrentUser() u: AuthenticatedUser,
-    @Param('projectId') p: string,
+    @Param('projectId', ParseUUIDPipe) p: string,
     @Body() dto: RoomDto,
   ) {
     return this.svc.createRoom(u, p, dto);
@@ -177,15 +178,15 @@ class RoomsTimelineController {
   @Roles('head', 'manager')
   removeRoom(
     @CurrentUser() u: AuthenticatedUser,
-    @Param('projectId') p: string,
-    @Param('id') id: string,
+    @Param('projectId', ParseUUIDPipe) p: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.svc.removeRoom(u, p, id);
   }
 
   @Get('timeline')
   @ApiOperation({ summary: 'List timeline phases (ordered)' })
-  listPhases(@CurrentUser() u: AuthenticatedUser, @Param('projectId') p: string) {
+  listPhases(@CurrentUser() u: AuthenticatedUser, @Param('projectId', ParseUUIDPipe) p: string) {
     return this.svc.listPhases(u, p);
   }
 
@@ -193,7 +194,7 @@ class RoomsTimelineController {
   @Roles('head', 'manager')
   createPhase(
     @CurrentUser() u: AuthenticatedUser,
-    @Param('projectId') p: string,
+    @Param('projectId', ParseUUIDPipe) p: string,
     @Body() dto: PhaseDto,
   ) {
     return this.svc.createPhase(u, p, dto);
@@ -203,8 +204,8 @@ class RoomsTimelineController {
   @Roles('head', 'manager')
   updatePhase(
     @CurrentUser() u: AuthenticatedUser,
-    @Param('projectId') p: string,
-    @Param('id') id: string,
+    @Param('projectId', ParseUUIDPipe) p: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: PhaseDto,
   ) {
     return this.svc.updatePhase(u, p, id, dto);

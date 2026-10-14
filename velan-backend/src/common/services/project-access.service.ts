@@ -8,6 +8,10 @@ import { AuthenticatedUser } from '../types/authenticated-user';
  *  - head: full access to all projects
  *  - manager/worker/client: only projects they belong to (project_members)
  *  - budget/settlements: head, or manager WITH has_budget_access
+ *
+ * NOTE: a user can legitimately have more than one project_members row for
+ * the same project (e.g. manager + worker after the ETL), so lookups use
+ * `.limit(1)` / aggregation, never `.maybeSingle()` (which errors on 2 rows).
  */
 @Injectable()
 export class ProjectAccessService {
@@ -22,12 +26,27 @@ export class ProjectAccessService {
     user: AuthenticatedUser,
   ): Promise<'all' | string[]> {
     if (user.role === 'head') return 'all';
+    const map = await this.membershipMap(user);
+    return [...map.keys()];
+  }
+
+  /**
+   * projectId -> "has budget access" for every project the user belongs to.
+   * (A manager has budget access on a project if ANY of their membership rows
+   * for it grants it.) Not meaningful for head (who sees everything).
+   */
+  async membershipMap(user: AuthenticatedUser): Promise<Map<string, boolean>> {
     const { data, error } = await this.db()
       .from('project_members')
-      .select('project_id')
+      .select('project_id, has_budget_access')
       .eq('user_id', user.id);
     if (error) throw new Error(error.message);
-    return (data ?? []).map((m) => m.project_id as string);
+    const out = new Map<string, boolean>();
+    for (const m of data ?? []) {
+      const pid = m.project_id as string;
+      out.set(pid, (out.get(pid) ?? false) || m.has_budget_access === true);
+    }
+    return out;
   }
 
   async assertMember(
@@ -40,9 +59,29 @@ export class ProjectAccessService {
       .select('id')
       .eq('user_id', user.id)
       .eq('project_id', projectId)
-      .maybeSingle();
+      .limit(1);
     if (error) throw new Error(error.message);
-    if (!data) throw new ForbiddenException('Not a member of this project');
+    if (!data || data.length === 0) {
+      throw new ForbiddenException('Not a member of this project');
+    }
+  }
+
+  /** True for head, or a manager whose membership grants budget access. */
+  async hasBudgetAccess(
+    user: AuthenticatedUser,
+    projectId: string,
+  ): Promise<boolean> {
+    if (user.role === 'head') return true;
+    if (user.role !== 'manager') return false;
+    const { data, error } = await this.db()
+      .from('project_members')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('project_id', projectId)
+      .eq('has_budget_access', true)
+      .limit(1);
+    if (error) throw new Error(error.message);
+    return !!data && data.length > 0;
   }
 
   async assertBudgetAccess(
@@ -53,14 +92,7 @@ export class ProjectAccessService {
     if (user.role !== 'manager') {
       throw new ForbiddenException('Budget access denied');
     }
-    const { data, error } = await this.db()
-      .from('project_members')
-      .select('has_budget_access')
-      .eq('user_id', user.id)
-      .eq('project_id', projectId)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    if (!data || !data.has_budget_access) {
+    if (!(await this.hasBudgetAccess(user, projectId))) {
       throw new ForbiddenException('No budget access for this project');
     }
   }

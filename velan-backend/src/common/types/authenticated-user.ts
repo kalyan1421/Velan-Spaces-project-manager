@@ -6,4 +6,6 @@ export interface AuthenticatedUser {
   email: string | null;
   role: AppRole;
   displayName: string | null;
+  /** Suspended accounts are rejected at login, refresh and on every request. */
+  isSuspended: boolean;
 }

@@ -6,6 +6,7 @@ import {
   Module,
   Param,
   Post,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -155,14 +156,14 @@ class BudgetController {
 
   @Get('budget/transactions')
   @ApiOperation({ summary: 'List budget transactions' })
-  listTxns(@CurrentUser() u: AuthenticatedUser, @Param('projectId') p: string) {
+  listTxns(@CurrentUser() u: AuthenticatedUser, @Param('projectId', ParseUUIDPipe) p: string) {
     return this.svc.listTransactions(u, p);
   }
 
   @Post('budget/transactions')
   addTxn(
     @CurrentUser() u: AuthenticatedUser,
-    @Param('projectId') p: string,
+    @Param('projectId', ParseUUIDPipe) p: string,
     @Body() dto: TxnDto,
   ) {
     return this.svc.addTransaction(u, p, dto);
@@ -170,14 +171,14 @@ class BudgetController {
 
   @Get('budget/summary')
   @ApiOperation({ summary: 'Budget totals (budget, estimate, spend)' })
-  summary(@CurrentUser() u: AuthenticatedUser, @Param('projectId') p: string) {
+  summary(@CurrentUser() u: AuthenticatedUser, @Param('projectId', ParseUUIDPipe) p: string) {
     return this.svc.summary(u, p);
   }
 
   @Get('settlements')
   listSettlements(
     @CurrentUser() u: AuthenticatedUser,
-    @Param('projectId') p: string,
+    @Param('projectId', ParseUUIDPipe) p: string,
   ) {
     return this.svc.listSettlements(u, p);
   }
@@ -185,7 +186,7 @@ class BudgetController {
   @Post('settlements')
   addSettlement(
     @CurrentUser() u: AuthenticatedUser,
-    @Param('projectId') p: string,
+    @Param('projectId', ParseUUIDPipe) p: string,
     @Body() dto: SettlementDto,
   ) {
     return this.svc.addSettlement(u, p, dto);

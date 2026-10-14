@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { validateEnv } from './config/env.validation';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
@@ -27,6 +28,8 @@ import { StaffModule } from './modules/staff/staff.module';
       isGlobal: true,
       validate: validateEnv,
     }),
+    // Global rate limit (per IP). Login/refresh get a much stricter limit.
+    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 120 }]),
     SharedModule,
     SupabaseModule,
     PushModule,
@@ -44,7 +47,8 @@ import { StaffModule } from './modules/staff/staff.module';
     StaffModule,
   ],
   providers: [
-    // Auth runs first (sets req.user), then role enforcement.
+    // Throttle first (cheap), then auth (sets req.user), then role enforcement.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

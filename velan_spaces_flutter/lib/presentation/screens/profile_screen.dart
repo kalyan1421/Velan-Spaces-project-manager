@@ -1,9 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:velan_spaces_flutter/core/theme.dart';
 import 'package:velan_spaces_flutter/domain/entities/user_role.dart';
 import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart';
+
+const _supportEmail = 'support@velanspaces.com';
+
+Future<void> _launchSupportMail(BuildContext context, {String subject = ''}) async {
+  final uri = Uri(
+    scheme: 'mailto',
+    path: _supportEmail,
+    query: subject.isEmpty ? null : 'subject=${Uri.encodeComponent(subject)}',
+  );
+  var opened = false;
+  try {
+    opened = await launchUrl(uri);
+  } catch (_) {
+    opened = false;
+  }
+  if (!opened && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('No email app found. Write to $_supportEmail')),
+    );
+  }
+}
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -114,35 +136,7 @@ class ProfileScreen extends ConsumerWidget {
                 _ProfileTile(
                   icon: Icons.notifications_outlined,
                   label: 'Notifications',
-                  onTap: () {
-                    showDialog(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        title: const Row(
-                          children: [
-                            Icon(Icons.notifications_outlined, color: Color(0xFFFFB347)),
-                            SizedBox(width: 8),
-                            Text('Notifications'),
-                          ],
-                        ),
-                        content: const Text(
-                          'Push notifications will be available in the next update.\n\n'
-                          'You will be able to receive alerts for:\n'
-                          '• Project updates\n'
-                          '• Budget changes\n'
-                          '• Worker assignments\n'
-                          '• Timeline milestones',
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx),
-                            child: const Text('OK'),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+                  onTap: () => context.push('/notifications'),
                 ),
                 _ProfileTile(
                   icon: Icons.help_outline,
@@ -168,20 +162,20 @@ class ProfileScreen extends ConsumerWidget {
                               ListTile(
                                 leading: const Icon(Icons.email_outlined),
                                 title: const Text('Email Us'),
-                                subtitle: const Text('support@velanspaces.com'),
-                                onTap: () => Navigator.pop(ctx),
-                              ),
-                              ListTile(
-                                leading: const Icon(Icons.phone_outlined),
-                                title: const Text('Call Us'),
-                                subtitle: const Text('Contact your admin for support'),
-                                onTap: () => Navigator.pop(ctx),
+                                subtitle: const Text(_supportEmail),
+                                onTap: () {
+                                  Navigator.pop(ctx);
+                                  _launchSupportMail(context);
+                                },
                               ),
                               ListTile(
                                 leading: const Icon(Icons.bug_report_outlined),
                                 title: const Text('Report a Bug'),
                                 subtitle: const Text('Help us improve the app'),
-                                onTap: () => Navigator.pop(ctx),
+                                onTap: () {
+                                  Navigator.pop(ctx);
+                                  _launchSupportMail(context, subject: 'Velan Spaces app bug report');
+                                },
                               ),
                             ],
                           ),
@@ -197,8 +191,8 @@ class ProfileScreen extends ConsumerWidget {
                     showAboutDialog(
                       context: context,
                       applicationName: 'Velan Spaces',
-                      applicationVersion: '1.0.1',
-                      applicationLegalese: '© 2024 Velan Spaces. All rights reserved.',
+                      applicationVersion: '1.0.2',
+                      applicationLegalese: '© 2026 Velan Spaces. All rights reserved.',
                       children: [
                         const SizedBox(height: 16),
                         const Text(
