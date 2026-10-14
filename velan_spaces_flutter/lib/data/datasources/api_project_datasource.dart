@@ -77,12 +77,18 @@ class ApiProjectDatasource implements ProjectDatasource {
       'targetEndDate': apiDateOnly(project.targetEndDate),
       if (project.managerIds.isNotEmpty) 'managerIds': project.managerIds,
       if (project.workerIds.isNotEmpty) 'workerIds': project.workerIds,
-      if (project.budgetAccessManagerIds.isNotEmpty)
-        'budgetAccessManagerIds': project.budgetAccessManagerIds,
+      if (project.budgetAccessManagerIds.isNotEmpty) 'budgetAccessManagerIds': project.budgetAccessManagerIds,
     }) as Map<String, dynamic>;
     ApiInvalidation.instance.notify(ApiTopics.projects);
     return res['id'] as String;
   }
+
+  @override
+  Stream<ProjectModel> watchProject(String projectId) => pollJson<ProjectModel>(
+        fetchJson: () => _api.get('/projects/$projectId'),
+        map: (json) => ProjectModel.fromApi(Map<String, dynamic>.from(json as Map)),
+        topics: [ApiTopics.project(projectId), ApiTopics.projects],
+      );
 
   /// Accepts the project id. (Clients no longer look projects up by code.)
   @override
@@ -137,7 +143,8 @@ class ApiProjectDatasource implements ProjectDatasource {
   // ------------------------------------------------------------ designs
   @override
   Stream<List<DesignDocumentModel>> watchDesigns(String projectId) =>
-      _watch('/projects/$projectId/designs', DesignDocumentModel.fromApi, topics: [ApiTopics.project(projectId)]);
+      _watch('/projects/$projectId/designs', DesignDocumentModel.fromApi,
+          topics: [ApiTopics.project(projectId)]);
 
   @override
   Future<void> addDesign(String projectId, DesignDocumentModel design) async {
@@ -279,26 +286,63 @@ class ApiProjectDatasource implements ProjectDatasource {
   }
 
   // ------------------------------------------------------------ budget
-  // Settlements and expenses move to the API in the budget module (next step).
-  static UnsupportedError _budgetPending() =>
-      UnsupportedError('Budget is being moved to the new server and is not available yet.');
+  // Head and budget-enabled managers only. Spend (settlements + expense
+  // debits) is recomputed by the server after every change.
+  @override
+  Stream<List<SettlementModel>> watchSettlements(String projectId) =>
+      _watch('/projects/$projectId/settlements', SettlementModel.fromApi,
+          topics: [ApiTopics.project(projectId)]);
 
   @override
-  Stream<List<SettlementModel>> watchSettlements(String projectId) => Stream.error(_budgetPending());
+  Future<void> addSettlement(String projectId, SettlementModel settlement) async {
+    await _api.post('/projects/$projectId/settlements', {
+      'amount': settlement.amount,
+      if (settlement.description.isNotEmpty) 'description': settlement.description,
+      if (settlement.paidTo.isNotEmpty) 'paidToName': settlement.paidTo,
+      if (settlement.paymentMethod.isNotEmpty) 'mode': settlement.paymentMethod,
+      if (settlement.proofUrl.isNotEmpty) 'proofUrl': settlement.proofUrl,
+      if (DateTime.tryParse(settlement.date) != null) 'date': settlement.date,
+    });
+    _changed(projectId);
+  }
 
   @override
-  Future<void> addSettlement(String projectId, SettlementModel settlement) async => throw _budgetPending();
+  Stream<List<ExpenseModel>> watchExpenses(String projectId) =>
+      _watch('/projects/$projectId/expenses', ExpenseModel.fromApi, topics: [ApiTopics.project(projectId)]);
 
   @override
-  Stream<List<ExpenseModel>> watchExpenses(String projectId) => Stream.error(_budgetPending());
+  Future<void> addExpense(String projectId, ExpenseModel expense) async {
+    await _api.post('/projects/$projectId/expenses', {
+      'type': expense.type,
+      'amount': expense.amount,
+      'date': apiDateOnly(expense.date),
+      'category': expense.category,
+      if (expense.paymentMethod.isNotEmpty) 'paymentMethod': expense.paymentMethod,
+      if (expense.accountDetails.isNotEmpty) 'accountDetails': expense.accountDetails,
+      if (expense.proofUrl.isNotEmpty) 'proofUrl': expense.proofUrl,
+    });
+    _changed(projectId);
+  }
 
   @override
-  Future<void> addExpense(String projectId, ExpenseModel expense) async => throw _budgetPending();
+  Future<void> updateExpense(String projectId, String expenseId, Map<String, dynamic> data) async {
+    final date = data['date'];
+    await _api.patch('/projects/$projectId/expenses/$expenseId', {
+      if (data.containsKey('type')) 'type': data['type'],
+      if (data.containsKey('amount')) 'amount': data['amount'],
+      if (date is DateTime) 'date': apiDateOnly(date),
+      if (date is String) 'date': date.split('T').first,
+      if (data.containsKey('category')) 'category': data['category'],
+      if (data.containsKey('paymentMethod')) 'paymentMethod': data['paymentMethod'],
+      if (data.containsKey('accountDetails')) 'accountDetails': data['accountDetails'],
+      if (data.containsKey('proofUrl')) 'proofUrl': data['proofUrl'],
+    });
+    _changed(projectId);
+  }
 
   @override
-  Future<void> updateExpense(String projectId, String expenseId, Map<String, dynamic> data) async =>
-      throw _budgetPending();
-
-  @override
-  Future<void> deleteExpense(String projectId, String expenseId) async => throw _budgetPending();
+  Future<void> deleteExpense(String projectId, String expenseId) async {
+    await _api.delete('/projects/$projectId/expenses/$expenseId');
+    _changed(projectId);
+  }
 }

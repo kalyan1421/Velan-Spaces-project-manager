@@ -18,6 +18,7 @@ import {
   MemberRole,
   MemberRow,
   planMemberSync,
+  visibleMembers,
 } from './project-members';
 
 /**
@@ -252,7 +253,7 @@ export class ProjectsService {
   ) {
     return {
       ...sanitizeProject(row, viewer),
-      ...(members.get(row.id as string) ?? emptyMembers()),
+      ...visibleMembers(members.get(row.id as string) ?? emptyMembers(), viewer.role),
     };
   }
 

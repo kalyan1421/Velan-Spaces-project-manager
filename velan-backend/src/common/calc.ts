@@ -53,3 +53,30 @@ export function computeSpend(transactions: TxnLike[]): number {
   }, 0);
   return round2(spend);
 }
+
+export interface BudgetBreakdown {
+  settlementsTotal: number;
+  /** Expense debits (money spent). */
+  expenseTotal: number;
+  /** Expense credits (money received, e.g. client payments). Not netted from spend. */
+  incomeTotal: number;
+  /** settlements + expense debits — same rule as SQL recompute_project_spend. */
+  currentSpend: number;
+}
+
+export function budgetBreakdown(
+  settlements: { amount: number | string }[],
+  expenses: TxnLike[],
+): BudgetBreakdown {
+  const sum = (xs: { amount: number | string }[]) =>
+    xs.reduce((acc, x) => acc + (Number(x.amount) || 0), 0);
+  const settlementsTotal = round2(sum(settlements ?? []));
+  const expenseTotal = round2(sum((expenses ?? []).filter((e) => e.type === 'debit')));
+  const incomeTotal = round2(sum((expenses ?? []).filter((e) => e.type === 'credit')));
+  return {
+    settlementsTotal,
+    expenseTotal,
+    incomeTotal,
+    currentSpend: round2(settlementsTotal + expenseTotal),
+  };
+}

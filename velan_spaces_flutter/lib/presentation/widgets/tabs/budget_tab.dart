@@ -49,12 +49,11 @@ class BudgetTab extends ConsumerWidget {
               final income = transactions
                   .where((t) => t.type == 'credit')
                   .fold<double>(0, (s, t) => s + t.amount);
-              final expense = transactions
-                  .where((t) => t.type == 'debit')
-                  .fold<double>(0, (s, t) => s + t.amount);
 
               final totalBudget = project.budget;
-              final budgetUsed = expense;
+              // One definition of "spent" everywhere: the server's
+              // settlements + expense debits (matches the project header).
+              final budgetUsed = project.currentSpend;
               final budgetRemaining = totalBudget - budgetUsed;
               
               final usagePercent = totalBudget > 0 ? (budgetUsed / totalBudget).clamp(0.0, 1.0) : 0.0;

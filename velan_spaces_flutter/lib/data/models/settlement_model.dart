@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:velan_spaces_flutter/core/api/api_parse.dart';
 import 'package:velan_spaces_flutter/domain/entities/settlement_entity.dart';
 
 class SettlementModel extends SettlementEntity {
@@ -13,6 +14,20 @@ class SettlementModel extends SettlementEntity {
     super.createdAt,
     super.proofUrl,
   });
+
+  factory SettlementModel.fromApi(Map<String, dynamic> j) {
+    return SettlementModel(
+      id: apiString(j['id']),
+      description: apiString(j['description']),
+      amount: apiDouble(j['amount']),
+      date: apiString(j['settlementDate']),
+      paidTo: apiString(j['paidToName']),
+      paymentMethod: apiString(j['mode']),
+      addedBy: apiString(j['createdByName']),
+      createdAt: apiDate(j['createdAt']),
+      proofUrl: apiString(j['proofUrl']),
+    );
+  }
 
   factory SettlementModel.fromSnapshot(DocumentSnapshot snap) {
     final data = snap.data() as Map<String, dynamic>;

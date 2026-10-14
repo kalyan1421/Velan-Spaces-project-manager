@@ -1,6 +1,6 @@
-import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:cross_file/cross_file.dart';
 import 'package:velan_spaces_flutter/core/api/api_client.dart';
 import 'package:velan_spaces_flutter/data/datasources/storage_datasource.dart';
 
@@ -13,11 +13,19 @@ class ApiStorageDatasource implements StorageDatasource {
 
   final ApiClient _api;
 
+  /// [filePath] is a file path on mobile/desktop or a blob URL on web
+  /// (image_picker); XFile reads both.
   @override
   Future<String> uploadFile(String filePath, String folder) async {
-    final originalName = filePath.split('/').last;
-    final bytes = await File(filePath).readAsBytes();
-    return _upload(bytes, folder, originalName, contentTypeFor(originalName));
+    final bytes = await XFile(filePath).readAsBytes();
+    var name = filePath.split('/').last.split('?').first;
+    // Web blob URLs carry no file name/extension: name it by its content,
+    // since the server only accepts known file types.
+    if (!_types.containsKey(_extensionOf(name))) {
+      final sniffed = sniffExtension(bytes);
+      if (sniffed != null) name = '$name.$sniffed';
+    }
+    return _upload(bytes, folder, name, contentTypeFor(name));
   }
 
   @override
@@ -74,31 +82,53 @@ class ApiStorageDatasource implements StorageDatasource {
     return cleaned.isEmpty ? 'file' : cleaned;
   }
 
-  static String contentTypeFor(String fileName) {
-    final ext = fileName.contains('.') ? fileName.split('.').last.toLowerCase() : '';
-    const types = {
-      'jpg': 'image/jpeg',
-      'jpeg': 'image/jpeg',
-      'png': 'image/png',
-      'webp': 'image/webp',
-      'gif': 'image/gif',
-      'heic': 'image/heic',
-      'heif': 'image/heif',
-      'pdf': 'application/pdf',
-      'mp4': 'video/mp4',
-      'mov': 'video/quicktime',
-      'm4v': 'video/x-m4v',
-      'doc': 'application/msword',
-      'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'xls': 'application/vnd.ms-excel',
-      'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'ppt': 'application/vnd.ms-powerpoint',
-      'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-      'txt': 'text/plain',
-      'csv': 'text/csv',
-    };
-    return types[ext] ?? 'application/octet-stream';
+  static String _extensionOf(String fileName) =>
+      fileName.contains('.') ? fileName.split('.').last.toLowerCase() : '';
+
+  /// File type from the first bytes (magic numbers) for unnamed uploads.
+  static String? sniffExtension(Uint8List b) {
+    bool at(int offset, List<int> sig) =>
+        b.length >= offset + sig.length &&
+        List.generate(sig.length, (i) => b[offset + i] == sig[i]).every((x) => x);
+    if (at(0, [0xFF, 0xD8, 0xFF])) return 'jpg';
+    if (at(0, [0x89, 0x50, 0x4E, 0x47])) return 'png';
+    if (at(0, [0x25, 0x50, 0x44, 0x46])) return 'pdf';
+    if (at(0, [0x47, 0x49, 0x46, 0x38])) return 'gif';
+    if (at(0, [0x52, 0x49, 0x46, 0x46]) && at(8, [0x57, 0x45, 0x42, 0x50])) return 'webp';
+    if (at(4, [0x66, 0x74, 0x79, 0x70])) {
+      // ISO media: brand at bytes 8-11 tells HEIC apart from MP4/MOV.
+      final brand = b.length >= 12 ? String.fromCharCodes(b.sublist(8, 12)) : '';
+      if (brand.startsWith('hei') || brand.startsWith('mif')) return 'heic';
+      if (brand.startsWith('qt')) return 'mov';
+      return 'mp4';
+    }
+    return null;
   }
+
+  static String contentTypeFor(String fileName) =>
+      _types[_extensionOf(fileName)] ?? 'application/octet-stream';
+
+  static const Map<String, String> _types = {
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'webp': 'image/webp',
+    'gif': 'image/gif',
+    'heic': 'image/heic',
+    'heif': 'image/heif',
+    'pdf': 'application/pdf',
+    'mp4': 'video/mp4',
+    'mov': 'video/quicktime',
+    'm4v': 'video/x-m4v',
+    'doc': 'application/msword',
+    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'xls': 'application/vnd.ms-excel',
+    'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'ppt': 'application/vnd.ms-powerpoint',
+    'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'txt': 'text/plain',
+    'csv': 'text/csv',
+  };
 
   static String _trimSlashes(String s) => s.replaceAll(RegExp(r'^/+|/+$'), '');
 }

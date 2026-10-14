@@ -1,4 +1,4 @@
-import { groupMembers, MemberRow, planMemberSync } from './project-members';
+import { groupMembers, MemberRow, planMemberSync, visibleMembers } from './project-members';
 
 const row = (user_id: string, member_role: MemberRow['member_role'], has_budget_access = false, project_id = 'p1'): MemberRow => ({
   project_id,
@@ -66,5 +66,22 @@ describe('planMemberSync', () => {
   it('dedupes desired ids', () => {
     const plan = planMemberSync([], { workerIds: ['w1', 'w1'] });
     expect(plan.inserts).toHaveLength(1);
+  });
+});
+
+describe('visibleMembers', () => {
+  const lists = { managerIds: ['m'], workerIds: ['w'], clientIds: ['c'], budgetAccessManagerIds: ['m'] };
+
+  it('staff see everything', () => {
+    expect(visibleMembers(lists, 'head')).toEqual(lists);
+    expect(visibleMembers(lists, 'manager')).toEqual(lists);
+  });
+
+  it('workers do not see clients or budget access', () => {
+    expect(visibleMembers(lists, 'worker')).toEqual({ managerIds: ['m'], workerIds: ['w'] });
+  });
+
+  it('clients only see the worker list', () => {
+    expect(visibleMembers(lists, 'client')).toEqual({ workerIds: ['w'] });
   });
 });

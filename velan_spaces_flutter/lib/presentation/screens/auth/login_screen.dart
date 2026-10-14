@@ -21,6 +21,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _passwordFocus = FocusNode();
   bool _isLoading = false;
   bool _obscure = true;
   String? _errorMessage;
@@ -29,6 +30,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   void dispose() {
     _identifierController.dispose();
     _passwordController.dispose();
+    _passwordFocus.dispose();
     super.dispose();
   }
 
@@ -52,8 +54,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       .read(authNotifierProvider.notifier)
       .signInWithPassword(_identifierController.text, _passwordController.text));
 
-  void _signInWithGoogle() =>
-      _run(() => ref.read(authNotifierProvider.notifier).signInWithGoogle());
+  void _signInWithGoogle() => _run(() => ref.read(authNotifierProvider.notifier).signInWithGoogle());
 
   InputDecoration _decoration({Widget? suffix}) {
     OutlineInputBorder border(Color c) => OutlineInputBorder(
@@ -100,6 +101,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final fieldStyle = GoogleFonts.inter(fontSize: 15, color: Colors.black);
+    // With the keyboard up there is no room for the footer; drop it so the
+    // fields stay visible.
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FC),
@@ -167,12 +171,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             autofillHints: const [AutofillHints.username, AutofillHints.email],
                             style: fieldStyle,
                             decoration: _decoration(),
+                            onSubmitted: (_) => _passwordFocus.requestFocus(),
                           )),
                           const SizedBox(height: 20),
                           _label('PASSWORD'),
                           _shadowed(TextField(
                             key: const Key('login-password'),
                             controller: _passwordController,
+                            focusNode: _passwordFocus,
                             obscureText: _obscure,
                             textInputAction: TextInputAction.done,
                             autofillHints: const [AutofillHints.password],
@@ -287,28 +293,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 32),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(width: 40, height: 1, color: _border),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      'VELAN SPACES',
-                      style: GoogleFonts.inter(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 2,
-                        color: _muted,
+            if (!keyboardOpen)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 32),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(width: 40, height: 1, color: _border),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        'VELAN SPACES',
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 2,
+                          color: _muted,
+                        ),
                       ),
                     ),
-                  ),
-                  Container(width: 40, height: 1, color: _border),
-                ],
+                    Container(width: 40, height: 1, color: _border),
+                  ],
+                ),
               ),
-            ),
           ],
         ),
       ),

@@ -65,15 +65,16 @@ final managerProjectsProvider = StreamProvider<List<ProjectEntity>>((ref) {
       ));
 });
 
+/// Live: header spend / completion / members refresh when they change.
 final projectDetailProvider =
-    FutureProvider.autoDispose.family<ProjectEntity, String>(
-        (ref, projectId) async {
+    StreamProvider.autoDispose.family<ProjectEntity, String>((ref, projectId) {
   final repo = ref.watch(projectRepositoryProvider);
-  final result = await repo.getProjectById(projectId);
-  return result.fold(
-    (failure) => throw Exception(failure.message),
-    (project) => project,
-  );
+  return repo.watchProject(projectId).map(
+        (either) => either.fold(
+          (failure) => throw Exception(failure.message),
+          (project) => project,
+        ),
+      );
 });
 
 // ─── Designs ──────────────────────────────────────────────────────────

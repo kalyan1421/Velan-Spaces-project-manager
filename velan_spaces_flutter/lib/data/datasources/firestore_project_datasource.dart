@@ -62,6 +62,15 @@ class FirestoreProjectDatasourceImpl implements ProjectDatasource {
   }
 
   @override
+  Stream<ProjectModel> watchProject(String projectId) {
+    return _firestore
+        .collection(_orgProjectsCollection)
+        .doc(projectId)
+        .snapshots()
+        .map(ProjectModel.fromSnapshot);
+  }
+
+  @override
   Future<ProjectModel> getProjectById(String projectId) async {
     // 1. Try direct Firestore doc ID lookup first (fastest)
     final docSnap = await _firestore

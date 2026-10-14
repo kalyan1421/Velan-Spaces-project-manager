@@ -1,4 +1,4 @@
-import { computeQuoteTotals, computeSpend } from './calc';
+import { computeQuoteTotals, budgetBreakdown, computeSpend } from './calc';
 
 describe('computeQuoteTotals', () => {
   const sections = [
@@ -55,5 +55,28 @@ describe('computeSpend', () => {
 
   it('coerces string amounts', () => {
     expect(computeSpend([{ type: 'debit', amount: '12.5' }])).toBe(12.5);
+  });
+});
+
+describe('budgetBreakdown', () => {
+  it('spend = settlements + expense debits; credits are income', () => {
+    const b = budgetBreakdown(
+      [{ amount: 1000 }, { amount: '250.50' }],
+      [
+        { type: 'debit', amount: 400 },
+        { type: 'credit', amount: 5000 },
+        { type: 'debit', amount: '99.99' },
+      ],
+    );
+    expect(b).toEqual({
+      settlementsTotal: 1250.5,
+      expenseTotal: 499.99,
+      incomeTotal: 5000,
+      currentSpend: 1750.49,
+    });
+  });
+
+  it('handles empty input', () => {
+    expect(budgetBreakdown([], []).currentSpend).toBe(0);
   });
 });

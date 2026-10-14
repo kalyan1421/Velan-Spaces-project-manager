@@ -32,8 +32,7 @@ class ApiClient {
   /// Called once when the session can no longer be refreshed.
   void Function()? onSessionExpired;
 
-  Future<dynamic> get(String path, {Map<String, String>? query}) =>
-      _send('GET', path, query: query);
+  Future<dynamic> get(String path, {Map<String, String>? query}) => _send('GET', path, query: query);
 
   Future<dynamic> post(String path, [Object? body]) => _send('POST', path, body: body);
 

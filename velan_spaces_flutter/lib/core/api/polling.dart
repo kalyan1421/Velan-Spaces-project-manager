@@ -97,9 +97,8 @@ Stream<T> pollJson<T>({
         if (PollingLifecycle.instance.isForeground) unawaited(tick());
       });
       if (topics.isNotEmpty) {
-        invalidations = ApiInvalidation.instance.stream
-            .where(topics.contains)
-            .listen((_) => unawaited(tick()));
+        invalidations =
+            ApiInvalidation.instance.stream.where(topics.contains).listen((_) => unawaited(tick()));
       }
       resumes = PollingLifecycle.instance.onResume.listen((_) => unawaited(tick()));
     },

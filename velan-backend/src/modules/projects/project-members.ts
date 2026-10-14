@@ -113,3 +113,17 @@ export function planMemberSync(current: MemberRow[], desired: DesiredMembers): M
   }
   return plan;
 }
+
+/**
+ * Which member lists a viewer may see. Who can see the budget, and the client
+ * accounts on a project, are staff-only facts; a client only gets the worker
+ * list (its project screen shows "N workers assigned").
+ */
+export function visibleMembers(
+  lists: MemberLists,
+  role: 'head' | 'manager' | 'worker' | 'client',
+): Partial<MemberLists> {
+  if (role === 'head' || role === 'manager') return lists;
+  if (role === 'worker') return { managerIds: lists.managerIds, workerIds: lists.workerIds };
+  return { workerIds: lists.workerIds };
+}
