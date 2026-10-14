@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 360" fill="none" stroke="#1A1A2E" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <title>Line drawing of a wardrobe with loft storage and an open shelf unit</title>
+  <defs>
+    <linearGradient id="strip" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFE566" stop-opacity="0.8"/>
+      <stop offset="1" stop-color="#FFE566" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <circle cx="420" cy="70" r="30" fill="#FFE566" stroke="none"/>
+  <rect x="82" y="102" width="216" height="26" fill="url(#strip)" stroke="none"/>
+  <path d="M30 320 H450"/>
+  <path d="M80 56 H300 V320 H80 Z M80 100 H300 M153 56 V320 M227 56 V320 M80 308 H300"/>
+  <path d="M146 190 V214 M160 190 V214 M234 190 V214 M146 82 V92 M160 82 V92 M234 82 V92"/>
+  <path d="M320 140 H410 V320 H320 Z M320 185 H410 M320 230 H410 M320 275 H410"/>
+  <path d="M332 185 V170 H372 V185 M334 170 V158 H370 V170 M380 230 V210 H402 V230"/>
+  <path d="M330 275 V250 H338 V275 M340 275 V246 H348 V275 M352 275 V254 H360 V275"/>
+  <path d="M336 320 V296 H394 V320 M336 306 H394"/>
+</svg>

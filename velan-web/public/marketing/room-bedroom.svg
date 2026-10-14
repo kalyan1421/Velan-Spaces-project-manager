@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 360" fill="none" stroke="#1A1A2E" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <title>Line drawing of a bedroom: bed, bedside table with lamp, wall art and a plant</title>
+  <defs>
+    <radialGradient id="lamp" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFE566" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#FFE566" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <circle cx="400" cy="222" r="46" fill="url(#lamp)" stroke="none"/>
+  <path d="M30 320 H450"/>
+  <path d="M180 70 H280 V130 H180 Z M192 120 L214 96 L230 110 L246 92 L268 120"/>
+  <circle cx="206" cy="86" r="6" fill="#FFE566" stroke="none"/>
+  <path d="M130 236 V176 Q130 160 146 160 H314 Q330 160 330 176 V236"/>
+  <path d="M150 236 V224 Q150 212 162 212 H212 Q224 212 224 224 V236 M236 236 V224 Q236 212 248 212 H298 Q310 212 310 224 V236"/>
+  <path d="M112 236 H348 Q356 236 356 244 V276 H104 V244 Q104 236 112 236 Z M104 256 H356"/>
+  <path d="M104 276 H356 V296 H104 Z M114 296 V320 M346 296 V320"/>
+  <path d="M368 258 H432 M372 258 V300 H428 V258 M372 278 H428 M396 268 H404 M378 300 V320 M422 300 V320"/>
+  <path d="M386 206 H414 L422 230 H378 Z M400 230 V258"/>
+  <path d="M52 320 L58 288 H86 L92 320 M72 288 C64 262 50 252 40 248 M72 288 C78 266 86 258 94 254 M72 288 C70 266 72 248 76 234"/>
+</svg>

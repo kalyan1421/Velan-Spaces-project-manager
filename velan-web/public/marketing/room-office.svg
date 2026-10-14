@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 360" fill="none" stroke="#1A1A2E" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <title>Line drawing of a workspace: desk, monitor, chair, shelves and a pendant light</title>
+  <defs>
+    <linearGradient id="cone" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFE566" stop-opacity="0.95"/>
+      <stop offset="0.6" stop-color="#FFE566" stop-opacity="0.4"/>
+      <stop offset="1" stop-color="#FFE566" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <polygon points="206,98 250,98 296,198 160,198" fill="url(#cone)" stroke="none"/>
+  <circle cx="70" cy="96" r="16" fill="#FFE566" stroke="none"/>
+  <path d="M44 64 H118 V150 H44 Z M81 64 V150 M44 107 H118"/>
+  <path d="M30 320 H450"/>
+  <path d="M228 20 V72 M204 96 Q228 64 252 96 Z"/>
+  <path d="M184 138 H272 V184 H184 Z M228 184 V198 M212 200 H244"/>
+  <path d="M140 200 H330 V210 H140 Z M152 210 V320 M318 210 V320 M264 210 V268 H318 M264 239 H318 M284 224 H298 M284 253 H298"/>
+  <path d="M296 200 V188 H310 V200 M310 191 Q317 194 310 197"/>
+  <path d="M84 194 Q84 186 92 186 Q100 186 100 194 V244 H84 Z M84 246 H138 Q144 246 144 252 Q144 258 138 258 H84 Z M112 258 V300 M112 300 L90 310 M112 300 L134 310"/>
+  <circle cx="88" cy="314" r="4"/>
+  <circle cx="136" cy="314" r="4"/>
+  <path d="M352 92 H436 M352 140 H436 M360 92 V68 H368 V92 M370 92 V72 H378 V92 M380 92 V64 H388 V92"/>
+  <path d="M408 92 L411 80 H425 L428 92 M418 80 C414 68 406 64 400 62 M418 80 C421 66 430 61 436 60"/>
+  <path d="M360 140 V118 H392 V140 M404 140 V122 H428 V140"/>
+</svg>

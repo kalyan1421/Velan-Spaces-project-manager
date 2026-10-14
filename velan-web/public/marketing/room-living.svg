@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 360" fill="none" stroke="#1A1A2E" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <title>Line drawing of a living room: sofa, pendant lamp, floor lamp and side table</title>
+  <defs>
+    <linearGradient id="cone" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFE566" stop-opacity="0.95"/>
+      <stop offset="0.6" stop-color="#FFE566" stop-opacity="0.4"/>
+      <stop offset="1" stop-color="#FFE566" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <circle cx="380" cy="82" r="38" fill="#FFE566" stroke="none"/>
+  <polygon points="203,160 237,160 290,280 150,280" fill="url(#cone)" stroke="none"/>
+  <path d="M30 320 H450"/>
+  <path d="M60 150 L220 62 L430 180 V320"/>
+  <path d="M220 62 V118"/>
+  <path d="M214 127 Q214 118 220 118 Q226 118 226 127 M211 127 H229 C233 136 235 146 239 158 H201 C205 146 207 136 211 127 Z"/>
+  <path d="M120 190 H170 V230 H120 Z M128 223 L141 207 L151 216 L159 205 L165 213"/>
+  <circle cx="152" cy="198" r="3.5" fill="#FFE566" stroke="none"/>
+  <path d="M78 220 H104 L111 244 H71 Z M91 244 V320 M80 320 H102"/>
+  <path d="M135 288 V270 Q135 256 149 256 H291 Q305 256 305 270 V288"/>
+  <path d="M120 320 V292 Q120 279 133 279 Q146 279 146 292 V320 M294 320 V292 Q294 279 307 279 Q320 279 320 292 V320"/>
+  <path d="M146 302 H294"/>
+  <path d="M168 268 h10 v10 h-10 Z M215 268 h10 v10 h-10 Z M262 268 h10 v10 h-10 Z"/>
+  <path d="M350 286 H394 Q398 286 398 290 Q398 294 394 294 H350 Q346 294 346 290 Q346 286 350 286 Z M352 294 V310 H392 V294 M357 310 L352 320 M387 310 L392 320"/>
+  <path d="M362 286 L365 274 H379 L382 286 M372 274 C368 258 359 252 352 250 M372 274 C375 256 385 249 393 247 M372 274 C371 262 371 252 372 244"/>
+</svg>
