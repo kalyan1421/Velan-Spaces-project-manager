@@ -23,6 +23,7 @@ import { SalesModule } from './modules/sales/sales.module';
 import { ChatComplaintsModule } from './modules/chat-complaints/chat-complaints.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { StaffModule } from './modules/staff/staff.module';
+import { AccountsModule } from './modules/accounts/accounts.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { StaffModule } from './modules/staff/staff.module';
     ChatComplaintsModule,
     NotificationsModule,
     StaffModule,
+    AccountsModule,
   ],
   providers: [
     // Throttle first (cheap), then auth (sets req.user), then role enforcement.

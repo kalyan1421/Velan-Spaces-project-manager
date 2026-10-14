@@ -33,6 +33,11 @@ export const envSchema = z.object({
   // accepted (iOS, Android and web clients). Unset = Google sign-in disabled.
   GOOGLE_CLIENT_IDS: z.string().optional(),
 
+  // Web app address used in invite / password-reset links handed to people.
+  APP_PUBLIC_URL: z.string().url().default('http://localhost:3100'),
+  // Non-deliverable domain for workers' auth accounts (they log in by username).
+  WORKER_EMAIL_DOMAIN: z.string().min(3).default('workers.velanspaces.invalid'),
+
   // Comma-separated browser origins allowed by CORS (the Flutter web build).
   // Native mobile apps do not need CORS. In production, unset = CORS disabled.
   CORS_ORIGINS: z.string().optional(),
