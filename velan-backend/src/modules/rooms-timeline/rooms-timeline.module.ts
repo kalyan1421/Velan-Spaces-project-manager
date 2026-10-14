@@ -77,7 +77,8 @@ class UpdateRoomDto {
 }
 
 class ChecklistItemDto {
-  @ApiProperty() @IsString() @MaxLength(100) id!: string;
+  // The app builds ids as "<millis>-<label>", so allow label length + prefix.
+  @ApiProperty() @IsString() @MaxLength(400) id!: string;
   @ApiProperty() @IsString() @MaxLength(300) label!: string;
   @ApiProperty() @IsBoolean() isDone!: boolean;
 }
@@ -173,7 +174,7 @@ class TaskPatchDto {
   @ValidateNested({ each: true })
   @Type(() => ChecklistItemDto)
   checklistItems?: ChecklistItemDto[];
-  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) toggleChecklistItemId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(400) toggleChecklistItemId?: string;
   @ApiPropertyOptional({ type: NewCommentDto })
   @IsOptional()
   @ValidateNested()

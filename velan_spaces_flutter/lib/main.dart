@@ -6,6 +6,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:velan_spaces_flutter/app.dart';
+import 'package:velan_spaces_flutter/core/api/polling.dart';
 import 'package:velan_spaces_flutter/firebase_options.dart';
 import 'package:velan_spaces_flutter/core/services/fcm_service.dart';
 import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart';
@@ -20,6 +21,8 @@ Future<void> _backgroundHandler(RemoteMessage message) async {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Live screens poll the API; pause polling while the app is backgrounded.
+  PollingLifecycle.instance.attach();
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,

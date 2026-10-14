@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Global,
+  HttpCode,
   Injectable,
   Module,
   Param,
@@ -145,6 +146,7 @@ export class NotificationsService {
     return data;
   }
 
+  /** Logout: stop pushing to this device (only the caller's own token). */
   async removeToken(u: AuthenticatedUser, token: string) {
     const { error } = await this.db()
       .from('device_tokens')
@@ -182,6 +184,13 @@ class NotificationsController {
   @ApiOperation({ summary: 'Register / refresh this device’s FCM token' })
   register(@CurrentUser() u: AuthenticatedUser, @Body() dto: RegisterTokenDto) {
     return this.svc.registerToken(u, dto);
+  }
+
+  @Post('device-tokens/remove')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Unregister this device’s FCM token (on logout)' })
+  removeToken(@CurrentUser() u: AuthenticatedUser, @Body() dto: RegisterTokenDto) {
+    return this.svc.removeToken(u, dto.fcmToken);
   }
 }
 

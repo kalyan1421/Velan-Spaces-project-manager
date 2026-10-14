@@ -31,6 +31,13 @@ const DESIGN_BUCKETS = ['designs'] as const;
 const FILE_BUCKETS = ['project-files', 'designs'] as const;
 export const FILE_APPROVAL_STATUSES = ['pending', 'approved', 'rejected'] as const;
 
+type Named = Record<string, unknown> & { person?: { display_name?: string | null } | null };
+/** Flatten the embedded user (`person`) into `<field>` for the app to display. */
+function flattenPerson(row: Named, field: string) {
+  const { person, ...rest } = row;
+  return { ...rest, [field]: person?.display_name ?? null };
+}
+
 // ---------------------------------------------------------------- DTOs
 class CreateDesignDto {
   @ApiPropertyOptional() @IsOptional() @IsString() title?: string;
@@ -94,11 +101,11 @@ class DesignsFilesService {
     await this.access.assertMember(user, projectId);
     const { data, error } = await this.db()
       .from('designs')
-      .select('*')
+      .select('*, person:posted_by(display_name)')
       .eq('project_id', projectId)
       .order('created_at', { ascending: false });
     if (error) throw new Error(error.message);
-    return data;
+    return (data ?? []).map((r) => flattenPerson(r as Named, 'posted_by_name'));
   }
 
   async createDesign(
@@ -182,11 +189,11 @@ class DesignsFilesService {
     await this.access.assertMember(user, projectId);
     const { data, error } = await this.db()
       .from('files')
-      .select('*')
+      .select('*, person:uploaded_by(display_name)')
       .eq('project_id', projectId)
       .order('uploaded_at', { ascending: false });
     if (error) throw new Error(error.message);
-    return data;
+    return (data ?? []).map((r) => flattenPerson(r as Named, 'uploaded_by_name'));
   }
 
   async createFile(

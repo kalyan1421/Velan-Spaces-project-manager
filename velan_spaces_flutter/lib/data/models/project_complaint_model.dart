@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:velan_spaces_flutter/core/api/api_parse.dart';
 import 'package:velan_spaces_flutter/domain/entities/project_complaint_entity.dart';
 
 class ProjectComplaintModel extends ProjectComplaintEntity {
@@ -16,6 +17,26 @@ class ProjectComplaintModel extends ProjectComplaintEntity {
     super.updatedAt,
     super.resolvedAt,
   });
+
+  factory ProjectComplaintModel.fromApi(Map<String, dynamic> j) {
+    return ProjectComplaintModel(
+      id: apiString(j['id']),
+      projectId: apiString(j['projectId']),
+      title: apiString(j['title']),
+      description: apiString(j['description']),
+      createdBy: apiString(j['createdBy']),
+      createdByName: apiString(j['createdByName']),
+      status: ProjectComplaintStatus.values.firstWhere(
+        (status) => status.name == j['status'],
+        orElse: () => ProjectComplaintStatus.open,
+      ),
+      attachments: apiStringList(j['attachments']),
+      resolutionNote: apiString(j['resolutionNote']),
+      createdAt: apiDate(j['createdAt']),
+      updatedAt: apiDate(j['updatedAt']),
+      resolvedAt: apiDate(j['resolvedAt']),
+    );
+  }
 
   factory ProjectComplaintModel.fromSnapshot(DocumentSnapshot snap) {
     final data = snap.data() as Map<String, dynamic>;

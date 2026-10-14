@@ -18,6 +18,8 @@ import {
 import { IsBoolean, IsIn, IsOptional, IsString } from 'class-validator';
 import { SupabaseService } from '../../supabase/supabase.service';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { AuthenticatedUser } from '../../common/types/authenticated-user';
 
 // ---------------------------------------------------------------- DTOs
 class UpdateStaffDto {
@@ -35,6 +37,7 @@ class StaffService {
     return this.supabase.admin();
   }
 
+  /** Staff with the ids of the projects each one is assigned to. */
   async list(role?: string) {
     let q = this.db()
       .from('users')
@@ -44,7 +47,24 @@ class StaffService {
     if (role === 'manager' || role === 'worker') q = q.eq('role', role);
     const { data, error } = await q;
     if (error) throw new Error(error.message);
-    return data;
+    const users = data ?? [];
+    if (users.length === 0) return [];
+
+    const { data: members, error: mErr } = await this.db()
+      .from('project_members')
+      .select('user_id, project_id')
+      .in(
+        'user_id',
+        users.map((u) => u.id),
+      );
+    if (mErr) throw new Error(mErr.message);
+    const projectsOf = new Map<string, Set<string>>();
+    for (const m of members ?? []) {
+      const set = projectsOf.get(m.user_id) ?? new Set<string>();
+      set.add(m.project_id);
+      projectsOf.set(m.user_id, set);
+    }
+    return users.map((u) => ({ ...u, assigned_projects: [...(projectsOf.get(u.id) ?? [])] }));
   }
 
   async assignments(userId: string) {
@@ -76,24 +96,28 @@ class StaffService {
 // ---------------------------------------------------------------- Controller
 @ApiTags('staff')
 @ApiBearerAuth()
-@Roles('head')
 @Controller('staff')
 class StaffController {
   constructor(private readonly svc: StaffService) {}
 
+  // Managers staff their projects with workers, so they may list workers
+  // (never managers). Everything else here is head-only.
   @Get()
-  @ApiOperation({ summary: 'List managers & workers (optionally by role)' })
-  list(@Query('role') role?: string) {
-    return this.svc.list(role);
+  @Roles('head', 'manager')
+  @ApiOperation({ summary: 'List managers & workers (managers: workers only)' })
+  list(@CurrentUser() user: AuthenticatedUser, @Query('role') role?: string) {
+    return this.svc.list(user.role === 'manager' ? 'worker' : role);
   }
 
   @Get(':id/assignments')
+  @Roles('head')
   @ApiOperation({ summary: 'Projects a staff member is assigned to' })
   assignments(@Param('id', ParseUUIDPipe) id: string) {
     return this.svc.assignments(id);
   }
 
   @Patch(':id')
+  @Roles('head')
   @ApiOperation({ summary: 'Edit / suspend a staff member' })
   update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateStaffDto) {
     return this.svc.update(id, dto);

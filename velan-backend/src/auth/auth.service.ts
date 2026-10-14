@@ -41,16 +41,38 @@ export class AuthService {
     this.googleClientIds = parseClientIds(config.get('GOOGLE_CLIENT_IDS', { infer: true }));
   }
 
-  /** Email + password login via Supabase Auth; returns the session + user. */
+  /**
+   * Password login. The identifier is an email, or a username (workers have
+   * no email; their auth account uses a synthetic one). Every failure gives
+   * the same message so it doesn't reveal which usernames exist.
+   */
   async login(dto: LoginDto) {
+    const invalid = new UnauthorizedException('Invalid email/username or password');
+    const identifier = (dto.identifier ?? dto.email ?? '').trim();
+    const email = identifier.includes('@') ? identifier : await this.emailForUsername(identifier);
+    if (!email) throw invalid;
+
     const { data, error } = await this.supabase
       .authClient()
-      .auth.signInWithPassword({ email: dto.email, password: dto.password });
+      .auth.signInWithPassword({ email, password: dto.password });
 
-    if (error || !data.session || !data.user) {
-      throw new UnauthorizedException('Invalid email or password');
-    }
+    if (error || !data.session || !data.user) throw invalid;
     return this.sessionResponse(data.session, await this.requireActiveUser(data.user.id));
+  }
+
+  /** username -> the sign-in email of that user's auth account (or null). */
+  private async emailForUsername(username: string): Promise<string | null> {
+    const normalized = username.toLowerCase();
+    if (!/^[a-z0-9][a-z0-9._-]{2,31}$/.test(normalized)) return null;
+    const { data, error } = await this.supabase
+      .admin()
+      .from('users')
+      .select('id')
+      .eq('username', normalized)
+      .maybeSingle();
+    if (error || !data) return null;
+    const { data: authUser } = await this.supabase.admin().auth.admin.getUserById(data.id);
+    return authUser.user?.email ?? null;
   }
 
   /**
@@ -165,7 +187,7 @@ export class AuthService {
     const { data, error } = await this.supabase
       .admin()
       .from('users')
-      .select('id, email, role, display_name, is_suspended')
+      .select('id, email, username, role, display_name, is_suspended')
       .eq('id', authId)
       .maybeSingle();
 
@@ -175,6 +197,7 @@ export class AuthService {
       email: data.email ?? null,
       role: data.role as AppRole,
       displayName: data.display_name ?? null,
+      username: data.username ?? null,
       isSuspended: data.is_suspended === true,
     };
   }

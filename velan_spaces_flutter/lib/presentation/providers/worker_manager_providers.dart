@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:velan_spaces_flutter/domain/entities/manager_entity.dart';
 import 'package:velan_spaces_flutter/domain/entities/worker_entity.dart';
 import 'package:velan_spaces_flutter/domain/entities/project_entity.dart';
@@ -59,12 +58,10 @@ class WorkerManagerController extends StateNotifier<AsyncValue<void>> {
 
       // 2. If project ID is provided, update the project's workerIds
       if (assignToProjectId != null) {
-        final projectDs = _ref.read(firestoreProjectDatasourceProvider);
-        // We need to use FieldValue.arrayUnion, but ProjectDatasource.updateProject takes generic map.
-        // We assume the datasource implementation handles Map<String, dynamic> passed to update().
-        // Firestore allows FieldValue in update().
+        final projectDs = _ref.read(projectDatasourceProvider);
+        final project = await projectDs.getProjectById(assignToProjectId);
         await projectDs.updateProject(assignToProjectId, {
-          'workerIds': FieldValue.arrayUnion([workerId]),
+          'workerIds': {...project.workerIds, workerId}.toList(),
         });
       }
 

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:velan_spaces_flutter/data/datasources/firestore_project_datasource.dart';
+import 'package:velan_spaces_flutter/data/datasources/api_project_datasource.dart';
+import 'package:velan_spaces_flutter/data/datasources/api_storage_datasource.dart';
 import 'package:velan_spaces_flutter/data/datasources/project_datasource.dart';
 import 'package:velan_spaces_flutter/data/repositories/project_repository_impl.dart';
 import 'package:velan_spaces_flutter/domain/repositories/project_repository.dart';
@@ -15,24 +16,18 @@ import 'package:velan_spaces_flutter/domain/entities/project_chat_message_entity
 import 'package:velan_spaces_flutter/domain/entities/project_complaint_entity.dart';
 import 'package:velan_spaces_flutter/domain/entities/timeline_entity.dart';
 import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:velan_spaces_flutter/data/datasources/storage_datasource.dart';
-import 'package:velan_spaces_flutter/data/datasources/firebase_storage_datasource.dart';
 import 'package:velan_spaces_flutter/presentation/providers/worker_manager_providers.dart';
 import 'package:velan_spaces_flutter/data/repositories/timeline_repository.dart';
 
 // ─── Datasource & Repository ──────────────────────────────────────────
 
-final firebaseStorageProvider = Provider<FirebaseStorage>((ref) {
-  return FirebaseStorage.instance;
-});
-
 final storageDatasourceProvider = Provider<StorageDatasource>((ref) {
-  return FirebaseStorageDatasourceImpl(ref.watch(firebaseStorageProvider));
+  return ApiStorageDatasource(ref.watch(apiClientProvider));
 });
 
 final projectDatasourceProvider = Provider<ProjectDatasource>((ref) {
-  return FirestoreProjectDatasourceImpl(ref.watch(firestoreProvider));
+  return ApiProjectDatasource(ref.watch(apiClientProvider));
 });
 
 final projectRepositoryProvider = Provider<ProjectRepository>((ref) {
@@ -43,7 +38,7 @@ final projectRepositoryProvider = Provider<ProjectRepository>((ref) {
 });
 
 final timelineRepositoryProvider = Provider<TimelineRepository>((ref) {
-  return TimelineRepository(firestore: ref.watch(firestoreProvider));
+  return TimelineRepository(api: ref.watch(apiClientProvider));
 });
 
 // ─── Project Streams ──────────────────────────────────────────────────

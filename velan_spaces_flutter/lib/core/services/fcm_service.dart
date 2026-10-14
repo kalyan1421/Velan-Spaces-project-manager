@@ -1,10 +1,10 @@
 import 'dart:io';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:velan_spaces_flutter/core/api/api_client.dart';
 
 /// Background message handler — MUST be a top-level function
 @pragma('vm:entry-point')
@@ -19,7 +19,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 ///
 /// Responsibilities:
 ///   1. Request OS-level notification permission
-///   2. Get FCM device token and save it to Firestore
+///   2. Get FCM device token and register it with the backend
 ///   3. Set up foreground notification display (heads-up on Android)
 ///   4. Handle background/terminated tap navigation via callback
 ///   5. Refresh token on rotation
@@ -103,7 +103,7 @@ class FCMService {
 
     // Token refresh listener
     _fcm.onTokenRefresh.listen((newToken) {
-      _saveTokenToFirestore(userId, newToken);
+      _registerToken(userId, newToken);
     });
 
     // ─── 6. Foreground message listener ────────────────────────────────
@@ -167,46 +167,39 @@ class FCMService {
     );
   }
 
-  /// Get the current FCM token and persist to Firestore
+  /// Get the current FCM token and register it with the backend.
   Future<void> _saveTokenForUser(String userId) async {
     try {
       final token = await _fcm.getToken();
       if (token != null && userId.isNotEmpty) {
-        await _saveTokenToFirestore(userId, token);
+        await _registerToken(userId, token);
       }
     } catch (e) {
       if (kDebugMode) print('⚠️ FCM token error: $e');
     }
   }
 
-  Future<void> _saveTokenToFirestore(String userId, String token) async {
+  /// The backend sends pushes to every token registered for the user.
+  Future<void> _registerToken(String userId, String token) async {
     if (userId.isEmpty) return;
     try {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .set({
-        'fcmTokens': FieldValue.arrayUnion([token]),
-        'lastTokenUpdated': FieldValue.serverTimestamp(),
+      await ApiClient.instance.post('/device-tokens', {
+        'fcmToken': token,
         'platform': kIsWeb ? 'web' : (Platform.isAndroid ? 'android' : 'ios'),
-      }, SetOptions(merge: true));
-      if (kDebugMode) print('✅ FCM token saved for user: $userId');
+      });
+      if (kDebugMode) print('✅ FCM token registered for user: $userId');
     } catch (e) {
-      if (kDebugMode) print('⚠️ FCM token save failed: $e');
+      if (kDebugMode) print('⚠️ FCM token registration failed: $e');
     }
   }
 
-  /// Call this on logout to de-register the token
+  /// Call on logout, while the session is still valid, to stop pushes to
+  /// this device.
   Future<void> signOut(String userId) async {
     try {
       final token = await _fcm.getToken();
       if (token != null && userId.isNotEmpty) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userId)
-            .update({
-          'fcmTokens': FieldValue.arrayRemove([token]),
-        });
+        await ApiClient.instance.post('/device-tokens/remove', {'fcmToken': token});
       }
       await _fcm.deleteToken();
     } catch (e) {

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:velan_spaces_flutter/core/api/api_parse.dart';
 import 'package:velan_spaces_flutter/domain/entities/design_document_entity.dart';
 
 class DesignDocumentModel extends DesignDocumentEntity {
@@ -13,6 +14,23 @@ class DesignDocumentModel extends DesignDocumentEntity {
     super.roomName,
     super.projectId,
   });
+
+  factory DesignDocumentModel.fromApi(Map<String, dynamic> j) {
+    return DesignDocumentModel(
+      id: apiString(j['id']),
+      title: apiString(j['title']),
+      fileUrl: apiString(j['fileUrl']),
+      type: apiString(j['type'], '2D'),
+      postedBy: apiString(j['postedByName']),
+      timestamp: apiDate(j['createdAt']),
+      roomName: apiString(j['roomName']),
+      projectId: apiString(j['projectId']),
+      approvalStatus: DesignApprovalStatus(
+        approved: j['approvalApproved'] == true,
+        required: j['approvalRequired'] == true,
+      ),
+    );
+  }
 
   factory DesignDocumentModel.fromSnapshot(DocumentSnapshot snap) {
     final data = snap.data() as Map<String, dynamic>;

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:velan_spaces_flutter/core/api/api_parse.dart';
 import 'package:velan_spaces_flutter/domain/entities/project_update_entity.dart';
 import 'package:velan_spaces_flutter/domain/entities/user_role.dart';
 
@@ -17,6 +18,26 @@ class ProjectUpdateModel extends ProjectUpdateEntity {
     super.mediaUrls,
     super.comments,
   });
+
+  factory ProjectUpdateModel.fromApi(Map<String, dynamic> j) {
+    return ProjectUpdateModel(
+      id: apiString(j['id']),
+      postedBy: apiString(j['postedByName'], 'Unknown'),
+      role: userRoleFromString(j['role'] as String?),
+      type: apiString(j['type'], 'message'),
+      content: apiString(j['content']),
+      timestamp: apiDate(j['createdAt']) ?? DateTime.now(),
+      category: j['category'] as String?,
+      roomId: j['roomId'] as String?,
+      associatedWorkerIds: apiStringList(j['associatedWorkerIds']),
+      progressPercentage: apiInt(j['progressPercentage']),
+      mediaUrls: apiStringList(j['mediaUrls']),
+      comments: (j['comments'] as List? ?? const [])
+          .whereType<Map>()
+          .map((c) => Map<String, dynamic>.from(c))
+          .toList(),
+    );
+  }
 
   factory ProjectUpdateModel.fromSnapshot(DocumentSnapshot snap) {
     final data = snap.data() as Map<String, dynamic>;

@@ -31,6 +31,13 @@ import {
  * Every project is returned with its member id lists (managerIds, workerIds,
  * clientIds, budgetAccessManagerIds) — the shape the app's model expects.
  */
+/** True when `next` is omitted or holds the same ids as `current` (any order). */
+function sameIds(next: string[] | undefined, current: string[]): boolean {
+  if (next === undefined) return true;
+  const a = new Set(next);
+  return a.size === new Set(current).size && current.every((id) => a.has(id));
+}
+
 @Injectable()
 export class ProjectsService {
   constructor(
@@ -141,16 +148,29 @@ export class ProjectsService {
     });
   }
 
-  async update(user: AuthenticatedUser, id: string, dto: UpdateProjectDto) {
+  async update(user: AuthenticatedUser, id: string, input: UpdateProjectDto) {
     await this.access.assertMember(user, id);
+    const dto: UpdateProjectDto = { ...input };
 
-    const touchesMoney =
-      dto.budget !== undefined || dto.estimatedCost !== undefined;
+    // Edit forms send every field back. Money fields are hidden from users
+    // without budget access (they see 0), so their values are ignored rather
+    // than written or rejected.
     const canSeeBudget = await this.access.hasBudgetAccess(user, id);
-    if (touchesMoney && !canSeeBudget) {
-      throw new ForbiddenException('No budget access for this project');
+    if (!canSeeBudget) {
+      delete dto.budget;
+      delete dto.estimatedCost;
     }
-    if (user.role === 'manager') this.assertManagerMemberEdit(dto);
+    if (user.role === 'manager') {
+      // Likewise a manager's form echoes the member lists: only an actual
+      // change to managers/clients/budget access is refused.
+      const current = (await this.membersFor([id])).get(id) ?? emptyMembers();
+      if (sameIds(dto.managerIds, current.managerIds)) delete dto.managerIds;
+      if (sameIds(dto.clientIds, current.clientIds)) delete dto.clientIds;
+      if (sameIds(dto.budgetAccessManagerIds, current.budgetAccessManagerIds)) {
+        delete dto.budgetAccessManagerIds;
+      }
+      this.assertManagerMemberEdit(dto);
+    }
 
     const patch: Record<string, unknown> = {};
     if (dto.projectCode !== undefined) patch.project_code = dto.projectCode;
