@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:velan_spaces_flutter/core/utils/account_validators.dart';
+import 'package:velan_spaces_flutter/presentation/widgets/common/share_link_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:velan_spaces_flutter/core/theme.dart';
 import 'package:velan_spaces_flutter/core/utils/bottom_sheet_utils.dart';
@@ -238,6 +240,7 @@ class _StaffScreenState extends ConsumerState<StaffScreen>
 
   void _showAddWorkerDialog() {
     final nameController = TextEditingController();
+    final usernameController = TextEditingController();
     final phoneController = TextEditingController();
     final tradeController = TextEditingController();
     final passwordController = TextEditingController();
@@ -266,15 +269,27 @@ class _StaffScreenState extends ConsumerState<StaffScreen>
               ),
               const SizedBox(height: 12),
               TextFormField(
+                controller: usernameController,
+                autocorrect: false,
+                decoration: const InputDecoration(
+                  labelText: 'Username * (they sign in with this)',
+                  hintText: 'e.g. ravi.k',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.alternate_email),
+                ),
+                validator: AccountValidators.username,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
                 controller: passwordController,
                 decoration: const InputDecoration(
-                  labelText: 'Password *',
+                  labelText: 'Initial password *',
+                  helperText: 'Share it with the worker; reset links can replace it later',
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.lock),
                 ),
                 obscureText: true,
-                validator: (v) =>
-                    v == null || v.trim().isEmpty ? 'Required' : null,
+                validator: AccountValidators.newPassword,
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -301,17 +316,21 @@ class _StaffScreenState extends ConsumerState<StaffScreen>
                 onPressed: () async {
                   if (!formKey.currentState!.validate()) return;
                   Navigator.pop(ctx);
-                  await ref
-                      .read(workerManagerControllerProvider.notifier)
-                      .addWorker(
-                        name: nameController.text.trim(),
-                        phone: phoneController.text.trim(),
-                        trade: tradeController.text.trim(),
-                        password: passwordController.text.trim(),
-                      );
+                  final controller = ref.read(workerManagerControllerProvider.notifier);
+                  final ok = await controller.addWorker(
+                    name: nameController.text.trim(),
+                    username: usernameController.text.trim().toLowerCase(),
+                    phone: phoneController.text.trim(),
+                    trade: tradeController.text.trim(),
+                    password: passwordController.text,
+                  );
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Worker added')));
+                    final error = ref.read(workerManagerControllerProvider).error;
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(ok
+                          ? 'Worker added. They sign in with username "${usernameController.text.trim().toLowerCase()}".'
+                          : 'Could not add worker: $error'),
+                    ));
                   }
                 },
                 style: ElevatedButton.styleFrom(
@@ -408,7 +427,7 @@ class _WorkerCardState extends ConsumerState<_WorkerCard> {
     final nameController = TextEditingController(text: widget.worker.name);
     final phoneController = TextEditingController(text: widget.worker.phone);
     final tradeController = TextEditingController(text: widget.worker.trade);
-    final passwordController = TextEditingController(text: widget.worker.password);
+    final usernameController = TextEditingController(text: widget.worker.username);
     final formKey = GlobalKey<FormState>();
 
     showFormBottomSheet(
@@ -433,15 +452,14 @@ class _WorkerCardState extends ConsumerState<_WorkerCard> {
               ),
               const SizedBox(height: 12),
               TextFormField(
-                controller: passwordController,
+                controller: usernameController,
+                autocorrect: false,
                 decoration: const InputDecoration(
-                  labelText: 'Password *',
+                  labelText: 'Username *',
                   border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.lock),
+                  prefixIcon: Icon(Icons.alternate_email),
                 ),
-                obscureText: true,
-                validator: (v) =>
-                    v == null || v.trim().isEmpty ? 'Required' : null,
+                validator: AccountValidators.username,
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -472,9 +490,9 @@ class _WorkerCardState extends ConsumerState<_WorkerCard> {
                       .updateWorker(
                         workerId: widget.worker.id,
                         name: nameController.text.trim(),
+                        username: usernameController.text.trim(),
                         phone: phoneController.text.trim(),
                         trade: tradeController.text.trim(),
-                        password: passwordController.text.trim(),
                       );
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -490,10 +508,45 @@ class _WorkerCardState extends ConsumerState<_WorkerCard> {
                 ),
                 child: const Text('Save Changes'),
               ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _shareResetLink();
+                },
+                icon: const Icon(Icons.lock_reset),
+                label: const Text('Create password reset link'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Future<void> _shareResetLink() async {
+    final url = await ref
+        .read(workerManagerControllerProvider.notifier)
+        .createResetLink(widget.worker.id);
+    if (!mounted) return;
+    if (url == null) {
+      final error = ref.read(workerManagerControllerProvider).error;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not create link: $error')),
+      );
+      return;
+    }
+    await showShareLinkSheet(
+      context,
+      title: 'Password reset link',
+      message: 'Send this to ${widget.worker.name}. It lets them set a new password once, '
+          'within 24 hours. Their username stays "${widget.worker.username}".',
+      url: url,
+      shareText: 'Velan Spaces: set your new password here (valid 24 hours)',
     );
   }
 
@@ -564,6 +617,14 @@ class _WorkerCardState extends ConsumerState<_WorkerCard> {
                         ),
                       ),
                       const SizedBox(height: 4),
+                      if (widget.worker.username.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 2),
+                          child: Text(
+                            '@${widget.worker.username}',
+                            style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+                          ),
+                        ),
                       if (widget.worker.trade.isNotEmpty)
                         Row(
                           children: [

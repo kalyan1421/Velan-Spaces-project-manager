@@ -32,8 +32,20 @@ class WorkerManagerController extends StateNotifier<AsyncValue<void>> {
   WorkerManagerDatasource get _datasource =>
       _ref.read(workerManagerDatasourceProvider);
 
+  /// One-time password reset link (24h) for a manager, worker or client.
+  /// Returns null (and sets the error state) on failure.
+  Future<String?> createResetLink(String userId) async {
+    try {
+      return await _datasource.createPasswordResetLink(userId);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+      return null;
+    }
+  }
+
   Future<bool> addWorker({
     required String name,
+    required String username,
     required String password,
     String? phone,
     String? trade,
@@ -51,6 +63,7 @@ class WorkerManagerController extends StateNotifier<AsyncValue<void>> {
         trade: trade ?? '',
         password: password,
         assignedProjects: assignedProjects,
+        username: username,
       );
 
       // 1. Create Create Worker
@@ -101,10 +114,10 @@ class WorkerManagerController extends StateNotifier<AsyncValue<void>> {
     }
   }
 
+  /// Passwords are not editable any more; use [createResetLink].
   Future<bool> updateManager({
     required String managerId,
     required String name,
-    required String password,
     required bool isSuspended,
     String phone = '',
     String email = '',
@@ -115,7 +128,6 @@ class WorkerManagerController extends StateNotifier<AsyncValue<void>> {
         'name': name,
         'phone': phone,
         'email': email,
-        'password': password,
         'isSuspended': isSuspended,
       });
       state = const AsyncValue.data(null);
@@ -143,7 +155,7 @@ class WorkerManagerController extends StateNotifier<AsyncValue<void>> {
   Future<bool> updateWorker({
     required String workerId,
     required String name,
-    required String password,
+    String? username,
     String phone = '',
     String trade = '',
   }) async {
@@ -153,7 +165,7 @@ class WorkerManagerController extends StateNotifier<AsyncValue<void>> {
         'name': name,
         'phone': phone,
         'trade': trade,
-        'password': password,
+        if (username != null && username.trim().isNotEmpty) 'username': username.trim().toLowerCase(),
       });
       state = const AsyncValue.data(null);
       return true;

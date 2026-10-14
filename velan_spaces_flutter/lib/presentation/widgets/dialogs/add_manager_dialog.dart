@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:velan_spaces_flutter/core/utils/account_validators.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:velan_spaces_flutter/presentation/providers/worker_manager_providers.dart';
 
@@ -34,8 +35,8 @@ class _AddManagerDialogState extends ConsumerState<AddManagerDialog> {
     final success = await ref.read(workerManagerControllerProvider.notifier).addManager(
       name: _nameController.text.trim(),
       phone: _phoneController.text.trim(),
-      email: _emailController.text.trim(),
-      password: _passwordController.text.trim(),
+      email: _emailController.text.trim().toLowerCase(),
+      password: _passwordController.text,
     );
 
     if (success && mounted) {
@@ -44,8 +45,9 @@ class _AddManagerDialogState extends ConsumerState<AddManagerDialog> {
         const SnackBar(content: Text('Manager added successfully')),
       );
     } else if (mounted) {
+      final error = ref.read(workerManagerControllerProvider).error;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Error adding manager')),
+        SnackBar(content: Text('Could not add manager: $error')),
       );
       setState(() => _isSubmitting = false);
     }
@@ -78,15 +80,27 @@ class _AddManagerDialogState extends ConsumerState<AddManagerDialog> {
             ),
             const SizedBox(height: 16),
             TextFormField(
+              controller: _emailController,
+              autocorrect: false,
+              decoration: const InputDecoration(
+                labelText: 'Email (they sign in with this)',
+                prefixIcon: Icon(Icons.email),
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.emailAddress,
+              validator: AccountValidators.email,
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
               controller: _passwordController,
               decoration: const InputDecoration(
-                labelText: 'Password',
+                labelText: 'Initial password',
+                helperText: 'Share it with the manager; reset links can replace it later',
                 prefixIcon: Icon(Icons.lock),
                 border: OutlineInputBorder(),
               ),
               obscureText: true,
-              validator: (val) =>
-                  val == null || val.trim().isEmpty ? 'Password is required' : null,
+              validator: AccountValidators.newPassword,
             ),
             const SizedBox(height: 16),
             TextFormField(
@@ -97,16 +111,6 @@ class _AddManagerDialogState extends ConsumerState<AddManagerDialog> {
                 border: OutlineInputBorder(),
               ),
               keyboardType: TextInputType.phone,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _emailController,
-              decoration: const InputDecoration(
-                labelText: 'Email',
-                prefixIcon: Icon(Icons.email),
-                border: OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.emailAddress,
             ),
             const SizedBox(height: 24),
             ElevatedButton(

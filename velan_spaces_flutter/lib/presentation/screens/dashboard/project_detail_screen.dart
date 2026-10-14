@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:velan_spaces_flutter/core/utils/bottom_sheet_utils.dart';
 import 'package:velan_spaces_flutter/core/utils/format_utils.dart';
+import 'package:velan_spaces_flutter/presentation/widgets/dialogs/invite_client_sheet.dart';
 import 'package:velan_spaces_flutter/domain/entities/user_role.dart';
 import 'package:velan_spaces_flutter/domain/entities/project_entity.dart';
 import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart';
@@ -173,6 +175,13 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
                             context.push('/project/${project.id}/edit');
                           } else if (value == 'assign') {
                             _showAssignManagerSheet(context, project);
+                          } else if (value == 'invite') {
+                            showFormBottomSheet(
+                              context: context,
+                              title: 'Invite Client',
+                              initialSize: 0.7,
+                              child: InviteClientSheet(project: project),
+                            );
                           }
                         },
                         itemBuilder: (context) => [
@@ -183,6 +192,16 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
                                 Icon(Icons.edit_outlined, size: 18),
                                 SizedBox(width: 10),
                                 Text('Edit Project'),
+                              ],
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'invite',
+                            child: Row(
+                              children: [
+                                Icon(Icons.mark_email_unread_outlined, size: 18),
+                                SizedBox(width: 10),
+                                Text('Invite Client'),
                               ],
                             ),
                           ),

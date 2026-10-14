@@ -9,6 +9,7 @@ class WorkerEntity {
     this.trade = '',
     this.password = '',
     this.assignedProjects = const [],
+    this.username = '',
   });
 
   final String id;
@@ -17,4 +18,7 @@ class WorkerEntity {
   final String trade;
   final String password;
   final List<String> assignedProjects;
+
+  /// Workers sign in with this (they have no email).
+  final String username;
 }

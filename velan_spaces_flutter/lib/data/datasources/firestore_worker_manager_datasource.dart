@@ -7,6 +7,10 @@ const String _managersCollection = 'managers';
 const String _workersCollection = 'workers';
 
 class FirestoreWorkerManagerDatasourceImpl implements WorkerManagerDatasource {
+  @override
+  Future<String> createPasswordResetLink(String userId) =>
+      throw UnsupportedError('Password reset links need the Velan API');
+
   final FirebaseFirestore _firestore;
 
   FirestoreWorkerManagerDatasourceImpl(this._firestore);

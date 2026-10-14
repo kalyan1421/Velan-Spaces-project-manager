@@ -10,6 +10,7 @@ class WorkerModel extends WorkerEntity {
     super.trade,
     super.password,
     super.assignedProjects,
+    super.username,
   });
 
   /// From `GET /staff`. Passwords never leave the server any more.
@@ -20,6 +21,7 @@ class WorkerModel extends WorkerEntity {
       phone: apiString(j['phone']),
       trade: apiString(j['trade']),
       assignedProjects: apiStringList(j['assignedProjects']),
+      username: apiString(j['username']),
     );
   }
 
