@@ -5,7 +5,7 @@ import { SupabaseService } from '../../supabase/supabase.service';
 import { ProjectAccessService } from '../../common/services/project-access.service';
 import { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { evaluateStoragePolicy, StorageMode } from './storage-policy';
-import { isRef, normalizeProjectRef, parseStorageRef } from './storage-refs';
+import { isRef, normalizeProjectRef, parseStorageRef, publicizeStorageUrl } from './storage-refs';
 
 /**
  * Brokers Supabase Storage access. The client never holds storage keys:
@@ -45,12 +45,28 @@ export class StorageService {
   ): string | null {
     if (value === undefined || value === null || value === '') return null;
     const res = normalizeProjectRef(value, {
-      supabaseUrl: this.config.get('SUPABASE_URL', { infer: true }),
+      supabaseUrls: this.storageBases(),
       projectId,
       buckets,
     });
     if (!res.ok) throw new BadRequestException(res.reason);
     return res.value;
+  }
+
+  /** Addresses whose storage URLs we recognise as ours (public first). */
+  private storageBases(): string[] {
+    const internal = this.config.get('SUPABASE_URL', { infer: true });
+    const pub = this.config.get('SUPABASE_PUBLIC_URL', { infer: true });
+    return pub ? [pub, internal] : [internal];
+  }
+
+  /** A storage URL clients can reach (see SUPABASE_PUBLIC_URL). */
+  publicUrl(url: string): string {
+    return publicizeStorageUrl(
+      url,
+      this.config.get('SUPABASE_URL', { infer: true }),
+      this.config.get('SUPABASE_PUBLIC_URL', { infer: true }),
+    );
   }
 
   /** Best-effort delete of the objects behind `sb://` refs (other values ignored). */
@@ -97,7 +113,7 @@ export class StorageService {
       .storage.from(bucket)
       .createSignedUploadUrl(path);
     if (error) throw new BadRequestException('Could not create upload URL');
-    return { bucket, path, signedUrl: data.signedUrl, token: data.token };
+    return { bucket, path, signedUrl: this.publicUrl(data.signedUrl), token: data.token };
   }
 
   async signDownload(
@@ -112,6 +128,6 @@ export class StorageService {
       .storage.from(bucket)
       .createSignedUrl(path, expiresIn);
     if (error) throw new BadRequestException('Could not create download URL');
-    return { bucket, path, signedUrl: data.signedUrl, expiresIn };
+    return { bucket, path, signedUrl: this.publicUrl(data.signedUrl), expiresIn };
   }
 }

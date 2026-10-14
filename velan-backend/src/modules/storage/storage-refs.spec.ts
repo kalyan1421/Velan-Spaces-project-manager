@@ -1,9 +1,10 @@
-import { normalizeProjectRef, parseStorageRef, toRef } from './storage-refs';
+import { normalizeProjectRef, parseStorageRef, publicizeStorageUrl, toRef } from './storage-refs';
 
 const SB = 'http://127.0.0.1:54321';
 const PID = '5b91891e-1c5c-4f50-a8dc-f57c56d1458c';
 const OTHER = '11111111-2222-3333-4444-555555555555';
-const opts = { supabaseUrl: SB, projectId: PID, buckets: ['update-images', 'project-files'] as const };
+const PUBLIC = 'https://files.velan.example';
+const opts = { supabaseUrls: [PUBLIC, SB], projectId: PID, buckets: ['update-images', 'project-files'] as const };
 
 describe('parseStorageRef', () => {
   it('parses sb:// references', () => {
@@ -56,5 +57,21 @@ describe('normalizeProjectRef', () => {
     expect(normalizeProjectRef('javascript:alert(1)', opts).ok).toBe(false);
     expect(normalizeProjectRef('sb://nope', opts).ok).toBe(false);
     expect(normalizeProjectRef('  ', opts).ok).toBe(false);
+  });
+});
+
+describe('public storage URL', () => {
+  it('accepts signed URLs from either the public or internal address', () => {
+    const viaPublic = `${PUBLIC}/storage/v1/object/sign/update-images/projects/${PID}/a.jpg?token=t`;
+    expect(normalizeProjectRef(viaPublic, opts)).toEqual({ ok: true, value: `sb://update-images/projects/${PID}/a.jpg` });
+  });
+
+  it('rewrites internal-host URLs to the public address', () => {
+    const internal = 'http://kong:8000/storage/v1/object/sign/designs/p/a.pdf?token=t';
+    expect(publicizeStorageUrl(internal, 'http://kong:8000', PUBLIC)).toBe(
+      `${PUBLIC}/storage/v1/object/sign/designs/p/a.pdf?token=t`,
+    );
+    expect(publicizeStorageUrl(internal, 'http://kong:8000/', undefined)).toBe(internal);
+    expect(publicizeStorageUrl('https://elsewhere/x', 'http://kong:8000', PUBLIC)).toBe('https://elsewhere/x');
   });
 });

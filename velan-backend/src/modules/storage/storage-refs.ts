@@ -59,13 +59,16 @@ export type RefCheck = { ok: true; value: string } | { ok: false; reason: string
  */
 export function normalizeProjectRef(
   value: string,
-  opts: { supabaseUrl: string; projectId: string; buckets: readonly string[] },
+  opts: { supabaseUrls: readonly string[]; projectId: string; buckets: readonly string[] },
 ): RefCheck {
   if (typeof value !== 'string' || value.trim() === '') {
     return { ok: false, reason: 'Empty file reference' };
   }
   const v = value.trim();
-  const ref = parseStorageRef(v, opts.supabaseUrl);
+  const ref = opts.supabaseUrls.reduce<StorageRef | null>(
+    (found, base) => found ?? parseStorageRef(v, base),
+    null,
+  );
   if (ref) {
     if (!opts.buckets.includes(ref.bucket)) {
       return { ok: false, reason: `Files here must be stored in: ${opts.buckets.join(', ')}` };
@@ -81,4 +84,16 @@ export function normalizeProjectRef(
   if (v.startsWith(REF_PREFIX)) return { ok: false, reason: 'Malformed file reference' };
   if (/^https?:\/\/[^\s]+$/i.test(v)) return { ok: true, value: v };
   return { ok: false, reason: 'Unsupported file reference' };
+}
+
+/**
+ * Supabase builds signed URLs from the address the backend uses to reach it.
+ * When that is an internal hostname (self-hosted, e.g. http://kong:8000),
+ * swap in the public address clients can reach (SUPABASE_PUBLIC_URL).
+ */
+export function publicizeStorageUrl(url: string, internalBase: string, publicBase?: string): string {
+  if (!publicBase) return url;
+  const from = internalBase.replace(/\/+$/, '');
+  const to = publicBase.replace(/\/+$/, '');
+  return from !== to && url.startsWith(`${from}/`) ? `${to}${url.slice(from.length)}` : url;
 }

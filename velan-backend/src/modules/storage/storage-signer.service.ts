@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Env } from '../../config/env.validation';
 import { SupabaseService } from '../../supabase/supabase.service';
-import { parseStorageRef } from './storage-refs';
+import { parseStorageRef, publicizeStorageUrl } from './storage-refs';
 
 const TTL_SECONDS = 3600;
 /** Re-sign when less than this much validity is left. */
@@ -19,7 +21,10 @@ export class StorageSignerService {
   private readonly logger = new Logger(StorageSignerService.name);
   private readonly cache = new Map<string, { url: string; expiresAt: number }>();
 
-  constructor(private readonly supabase: SupabaseService) {}
+  constructor(
+    private readonly supabase: SupabaseService,
+    private readonly config: ConfigService<Env, true>,
+  ) {}
 
   /** ref -> signed URL. Refs that fail to sign are left out (caller keeps the ref). */
   async signRefs(refs: string[]): Promise<Map<string, string>> {
@@ -56,8 +61,13 @@ export class StorageSignerService {
       data.forEach((d, idx) => {
         if (d.error || !d.signedUrl) return; // e.g. object not uploaded yet
         const ref = items[idx].ref;
-        out.set(ref, d.signedUrl);
-        this.remember(ref, d.signedUrl, expiresAt);
+        const url = publicizeStorageUrl(
+          d.signedUrl,
+          this.config.get('SUPABASE_URL', { infer: true }),
+          this.config.get('SUPABASE_PUBLIC_URL', { infer: true }),
+        );
+        out.set(ref, url);
+        this.remember(ref, url, expiresAt);
       });
     }
     return out;

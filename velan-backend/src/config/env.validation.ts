@@ -12,6 +12,10 @@ export const envSchema = z.object({
   API_PREFIX: z.string().default('api/v1'),
 
   SUPABASE_URL: z.string().url(),
+  // Address phones/browsers use to reach Supabase Storage, when it differs
+  // from SUPABASE_URL (e.g. self-hosted behind an internal Docker hostname).
+  // Signed URLs handed to clients are rewritten to it. Defaults to SUPABASE_URL.
+  SUPABASE_PUBLIC_URL: z.string().url().optional(),
   SUPABASE_ANON_KEY: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   // Tokens are verified via the project JWKS (asymmetric keys), so the legacy
