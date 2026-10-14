@@ -81,6 +81,8 @@ class ExpenseDto {
 
 class UpdateExpenseDto extends PartialType(ExpenseDto) {}
 
+class UpdateSettlementDto extends PartialType(SettlementDto) {}
+
 // ---------------------------------------------------------------- Service
 @Injectable()
 class BudgetService {
@@ -135,6 +137,46 @@ class BudgetService {
     if (error) throw new Error(error.message);
     await this.recomputeSpend(projectId);
     return { ...data, created_by_name: u.displayName };
+  }
+
+  async updateSettlement(u: AuthenticatedUser, projectId: string, id: string, dto: UpdateSettlementDto) {
+    await this.access.assertBudgetAccess(u, projectId);
+    const patch: Record<string, unknown> = {};
+    if (dto.amount !== undefined) patch.amount = dto.amount;
+    if (dto.description !== undefined) patch.description = dto.description;
+    if (dto.paidToName !== undefined) patch.paid_to_name = dto.paidToName;
+    if (dto.mode !== undefined) patch.mode = dto.mode;
+    if (dto.date !== undefined) patch.settlement_date = dto.date;
+    if (dto.proofUrl !== undefined) {
+      patch.proof_url = this.storage.normalizeProjectRef(projectId, dto.proofUrl, PROOF_BUCKETS);
+    }
+    if (Object.keys(patch).length === 0) throw new BadRequestException('Nothing to update');
+    const { data, error } = await this.db()
+      .from('settlements')
+      .update(patch)
+      .eq('id', id)
+      .eq('project_id', projectId)
+      .select()
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) throw new NotFoundException('Settlement not found');
+    await this.recomputeSpend(projectId);
+    return data;
+  }
+
+  async removeSettlement(u: AuthenticatedUser, projectId: string, id: string) {
+    await this.access.assertBudgetAccess(u, projectId);
+    const { data, error } = await this.db()
+      .from('settlements')
+      .delete()
+      .eq('id', id)
+      .eq('project_id', projectId)
+      .select('proof_url');
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) throw new NotFoundException('Settlement not found');
+    await this.storage.removeRefs(data.map((r) => r.proof_url as string));
+    await this.recomputeSpend(projectId);
+    return { deleted: true };
   }
 
   // ------------------------------------------------------------ expenses
@@ -294,6 +336,27 @@ class BudgetController {
     @Body() dto: SettlementDto,
   ) {
     return this.svc.addSettlement(u, p, dto);
+  }
+
+  @Patch('settlements/:id')
+  @ApiOperation({ summary: 'Correct a settlement; updates project spend' })
+  updateSettlement(
+    @CurrentUser() u: AuthenticatedUser,
+    @Param('projectId', ParseUUIDPipe) p: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateSettlementDto,
+  ) {
+    return this.svc.updateSettlement(u, p, id, dto);
+  }
+
+  @Delete('settlements/:id')
+  @ApiOperation({ summary: 'Delete a settlement; updates project spend' })
+  removeSettlement(
+    @CurrentUser() u: AuthenticatedUser,
+    @Param('projectId', ParseUUIDPipe) p: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.svc.removeSettlement(u, p, id);
   }
 
   @Get('expenses')
