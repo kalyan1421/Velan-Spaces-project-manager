@@ -1,0 +1,86 @@
+name: web-ci
+
+on:
+  pull_request:
+    paths:
+      - 'velan-web/**'
+      - '.github/workflows/web-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'velan-web/**'
+      - '.github/workflows/web-ci.yml'
+
+# Least privilege: CI only reads the repo. Nothing is pushed or deployed.
+permissions:
+  contents: read
+
+# One run per PR / branch; a new push cancels the stale run.
+concurrency:
+  group: web-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: velan-web
+
+env:
+  NEXT_TELEMETRY_DISABLED: '1'
+
+jobs:
+  quality:
+    name: Typecheck, lint, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Dummy values: the build must succeed without a reachable API.
+      API_URL: http://localhost:3000/api/v1
+      APP_URL: http://localhost:3100
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: velan-web/package-lock.json
+
+      - name: Install (frozen lockfile)
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # Production-dependency audit. Non-blocking for now: the only high findings
+      # (Oct 2026) come from the `shadcn` CLI (fast-glob -> micromatch -> braces),
+      # which is listed under dependencies but never reaches the standalone server.
+      # TODO: move `shadcn` to devDependencies, then drop continue-on-error.
+      - name: Audit production dependencies (high+)
+        run: npm audit --omit=dev --audit-level=high
+        continue-on-error: true
+
+  docker:
+    name: Docker image build (no push)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Build velan-web image
+        run: docker build --pull -t velan-web:ci-${{ github.sha }} .
+
+      - name: Show image size
+        run: docker image ls velan-web:ci-${{ github.sha }}

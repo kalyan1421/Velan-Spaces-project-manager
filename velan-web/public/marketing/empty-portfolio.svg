@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 360" fill="none" stroke="#1A1A2E" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <title>Line drawing of an easel with a half-finished sketch of a house</title>
+  <path d="M60 320 H420"/>
+  <path d="M240 40 V70 M130 70 H350 V230 H130 Z"/>
+  <path d="M118 240 H362 V248 H118 Z M170 248 L140 320 M310 248 L340 320 M240 248 V320"/>
+  <circle cx="310" cy="100" r="16" fill="#FFE566" stroke="none"/>
+  <path d="M200 200 H160 V150 L230 110 L270 132"/>
+  <path d="M270 132 L300 150 V200 H200" stroke-dasharray="6 9"/>
+  <path d="M368 214 L414 128 L426 134 L380 220 Z M368 214 L366 230 L380 220 M408 140 L420 146"/>
+</svg>
