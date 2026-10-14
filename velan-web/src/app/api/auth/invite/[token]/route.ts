@@ -1,71 +1,50 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
+import { NAME_MAX, accountLinkOutcome, isLinkToken, passwordSchema } from "@/lib/api/accounts";
 import { readBody } from "@/lib/api/errors";
 import { forwardedFor } from "@/lib/api/forwarding";
-import { json, jsonError, readJsonBody, rejectCrossSite, upstreamMessage } from "@/lib/api/route-helpers";
+import { jsonError, readJsonBody, rejectCrossSite, upstreamMessage } from "@/lib/api/route-helpers";
 import { apiUrl, networkError, rawApiFetch } from "@/lib/api/server";
 import { completeSignIn } from "@/lib/auth/handlers";
-import { PASSWORD_MAX, PASSWORD_MIN, isValidLinkToken, linkProblemFrom } from "@/lib/auth/links";
 
 type Ctx = RouteContext<"/api/auth/invite/[token]">;
 
-const PROBLEM_MESSAGES = {
-  invalid: "This invite link is invalid or has already been used.",
-  expired: "This invite link has expired.",
-  unavailable: "Invites can't be accepted online yet.",
-  error: "We couldn't load this invite. Please try again.",
+/**
+ * Error copy for the accept form. `error` carries the state so the browser can switch
+ * to the right screen (it becomes `ApiError.code`). Tokens are never echoed or logged.
+ */
+const PROBLEMS = {
+  invalid: { status: 404, message: "This invite link isn't valid. Ask us to send a new one." },
+  expired: { status: 410, message: "This invite link has expired. Ask us to send a new one." },
+  used: { status: 410, message: "This invite link has already been used." },
+  "account-exists": { status: 409, message: "You already have an account — sign in." },
+  "rate-limited": { status: 429, message: "Too many attempts. Please wait a minute and try again." },
+  error: { status: 502, message: "We couldn't create your account. Please try again in a moment." },
 } as const;
 
-function inviteUrl(token: string, suffix = "") {
-  return apiUrl(`auth/invites/${encodeURIComponent(token)}${suffix}`);
-}
-
-/** GET → invite details `{email, displayName, projectName, expiresAt, accountExists}`. */
-export async function GET(request: NextRequest, ctx: Ctx) {
-  const { token } = await ctx.params;
-  if (!isValidLinkToken(token)) return jsonError(404, PROBLEM_MESSAGES.invalid, { problem: "invalid" });
-
-  let res: Response;
-  try {
-    res = await rawApiFetch(inviteUrl(token), { forwardedFor: forwardedFor(request.headers) });
-  } catch (error) {
-    const err = networkError(error);
-    return jsonError(err.status, err.message, { problem: "error" });
-  }
-
-  const body = await readBody(res);
-  if (res.ok) return json(body);
-  const problem = linkProblemFrom(res.status, upstreamMessage(body));
-  return jsonError(res.status >= 500 ? 502 : res.status, PROBLEM_MESSAGES[problem], { problem });
-}
-
 const acceptSchema = z.object({
-  password: z
-    .string()
-    .min(PASSWORD_MIN, `Use at least ${PASSWORD_MIN} characters.`)
-    .max(PASSWORD_MAX, `Use at most ${PASSWORD_MAX} characters.`)
-    .optional(),
-  displayName: z.string().trim().min(1).max(120).optional(),
+  password: passwordSchema,
+  displayName: z.string().trim().min(1, "Enter your name.").max(NAME_MAX, "That name is too long.").optional(),
 });
 
 /**
- * POST {password?, displayName?} → API accept. A new account comes back as a
- * session (cookies set, `{user, redirectTo}`); an existing account as
- * `{accountExists: true, redirectTo: "/login"}`.
+ * POST {password, displayName?} → `POST /auth/invites/:token/accept`.
+ * 200 → session cookies set (same as login) and `{user, redirectTo: "/portal"}`.
+ * 404 invalid · 410 used/expired · 409 the email already has an account.
  */
 export async function POST(request: NextRequest, ctx: Ctx) {
   const blocked = rejectCrossSite(request);
   if (blocked) return blocked;
 
   const { token } = await ctx.params;
-  if (!isValidLinkToken(token)) return jsonError(404, PROBLEM_MESSAGES.invalid, { problem: "invalid" });
+  if (!isLinkToken(token)) return jsonError(PROBLEMS.invalid.status, PROBLEMS.invalid.message, { error: "invalid" });
 
   const parsed = await readJsonBody(request, acceptSchema);
   if (!parsed.ok) return parsed.response;
 
   let res: Response;
   try {
-    res = await rawApiFetch(inviteUrl(token, "/accept"), {
+    res = await rawApiFetch(apiUrl(`auth/invites/${token}/accept`), {
       method: "POST",
       body: JSON.stringify(parsed.data),
       contentType: "application/json",
@@ -73,14 +52,17 @@ export async function POST(request: NextRequest, ctx: Ctx) {
     });
   } catch (error) {
     const err = networkError(error);
-    return jsonError(err.status, err.message);
+    return jsonError(err.status, err.message, { error: "error" });
   }
 
-  if (res.ok) {
-    const peek = (await res.clone().json().catch(() => null)) as { accountExists?: unknown } | null;
-    if (peek && peek.accountExists === true && !("accessToken" in peek)) {
-      return json({ accountExists: true, redirectTo: "/login" });
-    }
+  if (res.ok) return completeSignIn(res, { kind: "invite", next: "/portal" });
+
+  const message = upstreamMessage(await readBody(res));
+  const outcome = accountLinkOutcome(res.status, message);
+  if (outcome === "validation") {
+    // class-validator messages are about the password/name the person typed.
+    return jsonError(400, message ?? "Please check the details and try again.", { error: "validation" });
   }
-  return completeSignIn(res, { kind: "invite" });
+  const problem = outcome === "ok" ? PROBLEMS.error : PROBLEMS[outcome];
+  return jsonError(problem.status, problem.message, { error: outcome === "ok" ? "error" : outcome });
 }

@@ -1,4 +1,4 @@
-import { CalendarDays, Construction, MapPin } from "lucide-react";
+import { CalendarDays, MapPin } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -6,7 +6,7 @@ import { Suspense } from "react";
 import { SetBreadcrumbs } from "@/components/app-shell/breadcrumbs";
 import { ProgressBar } from "@/components/app-shell/progress-bar";
 import { PageSkeleton } from "@/components/app-shell/shell-skeleton";
-import { ForbiddenState, StateMessage } from "@/components/app-shell/states";
+import { ForbiddenState } from "@/components/app-shell/states";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { loadProject } from "@/lib/data/load-project";
@@ -14,10 +14,10 @@ import { formatDate, formatPercent } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Project overview" };
 
-/** Portal project sections; the pages ship in Wave 2 (see ./[tab]). */
+/** Portal project sections (read-only for clients). */
 const SECTIONS = [
   { segment: "updates", label: "Updates" },
-  { segment: "designs", label: "Designs" },
+  { segment: "designs", label: "Designs & documents" },
   { segment: "timeline", label: "Timeline" },
   { segment: "support", label: "Support" },
 ];
@@ -101,12 +101,6 @@ async function PortalProject({ params }: { params: PageProps<"/portal/projects/[
           ))}
         </ul>
       </nav>
-
-      <StateMessage
-        icon={Construction}
-        title="More is on the way"
-        description="Updates, designs, the timeline and support chat are coming to the web portal soon. Until then, use the Velan Spaces mobile app."
-      />
     </div>
   );
 }
