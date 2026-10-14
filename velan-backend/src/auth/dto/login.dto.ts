@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class LoginDto {
   @ApiProperty({ example: 'head@velanspaces.com' })
@@ -16,4 +16,24 @@ export class RefreshDto {
   @ApiProperty()
   @IsString()
   refreshToken!: string;
+}
+
+export class GoogleLoginDto {
+  @ApiProperty({ description: 'Google ID token from the native/web Google sign-in' })
+  @IsString()
+  @MinLength(20)
+  idToken!: string;
+}
+
+export class ChangePasswordDto {
+  @ApiProperty()
+  @IsString()
+  @MinLength(6)
+  currentPassword!: string;
+
+  @ApiProperty({ minLength: 8 })
+  @IsString()
+  @MinLength(8)
+  @MaxLength(72) // bcrypt input limit used by Supabase Auth
+  newPassword!: string;
 }

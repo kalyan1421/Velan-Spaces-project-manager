@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { validateEnv } from './config/env.validation';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
+import { CamelCaseInterceptor } from './common/interceptors/camel-case.interceptor';
+import { SignStorageRefsInterceptor } from './common/interceptors/sign-storage-refs.interceptor';
 import { SharedModule } from './common/shared.module';
 import { SupabaseModule } from './supabase/supabase.module';
 import { PushModule } from './push/push.module';
@@ -52,6 +54,10 @@ import { StaffModule } from './modules/staff/staff.module';
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
+    // API contract is camelCase; services return raw snake_case rows.
+    { provide: APP_INTERCEPTOR, useClass: CamelCaseInterceptor },
+    // Rows store private-bucket refs (sb://...); responses carry signed URLs.
+    { provide: APP_INTERCEPTOR, useClass: SignStorageRefsInterceptor },
   ],
 })
 export class AppModule {}

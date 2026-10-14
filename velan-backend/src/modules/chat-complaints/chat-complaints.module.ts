@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -17,7 +18,7 @@ import {
   ApiPropertyOptional,
   ApiTags,
 } from '@nestjs/swagger';
-import { IsArray, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { SupabaseService } from '../../supabase/supabase.service';
 import { ProjectAccessService } from '../../common/services/project-access.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -25,37 +26,45 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { parsePagination } from '../../common/pagination';
 import { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { NotificationsService } from '../notifications/notifications.module';
+import { StorageService } from '../storage/storage.service';
+
+const ATTACHMENT_BUCKETS = ['project-files'] as const;
 
 // ---------------------------------------------------------------- DTOs
 class MessageDto {
-  @ApiProperty() @IsString() content!: string;
+  @ApiProperty() @IsString() @MaxLength(5000) content!: string;
   @ApiPropertyOptional({ default: 'text' })
   @IsOptional()
   @IsString()
+  @MaxLength(30)
   messageType?: string;
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(10)
   @IsString({ each: true })
   attachmentUrls?: string[];
 }
 
 class ComplaintDto {
-  @ApiProperty() @IsString() title!: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
+  @ApiProperty() @IsString() @MaxLength(300) title!: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(5000) description?: string;
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(10)
   @IsString({ each: true })
   attachments?: string[];
 }
 
 export const COMPLAINT_STATUSES = ['open', 'inProgress', 'resolved', 'closed'] as const;
 
+/** Change the status, the resolution note, or both. */
 class UpdateComplaintDto {
-  @ApiProperty({ enum: COMPLAINT_STATUSES })
+  @ApiPropertyOptional({ enum: COMPLAINT_STATUSES })
+  @IsOptional()
   @IsIn(COMPLAINT_STATUSES as unknown as string[])
-  status!: string;
+  status?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -71,6 +80,7 @@ class ChatComplaintsService {
     private readonly supabase: SupabaseService,
     private readonly access: ProjectAccessService,
     private readonly notifications: NotificationsService,
+    private readonly storage: StorageService,
   ) {}
   private db() {
     return this.supabase.admin();
@@ -104,7 +114,7 @@ class ChatComplaintsService {
         sender_role: u.role.toUpperCase(),
         content: dto.content,
         message_type: dto.messageType ?? 'text',
-        attachment_urls: dto.attachmentUrls ?? [],
+        attachment_urls: this.storage.normalizeProjectRefs(projectId, dto.attachmentUrls, ATTACHMENT_BUCKETS),
       })
       .select()
       .single();
@@ -138,7 +148,7 @@ class ChatComplaintsService {
         created_by: u.id,
         created_by_name: u.displayName,
         status: 'open',
-        attachments: dto.attachments ?? [],
+        attachments: this.storage.normalizeProjectRefs(projectId, dto.attachments, ATTACHMENT_BUCKETS),
       })
       .select()
       .single();
@@ -159,13 +169,21 @@ class ChatComplaintsService {
     u: AuthenticatedUser,
     projectId: string,
     id: string,
-    status: string,
+    status?: string,
     resolutionNote?: string,
   ) {
     await this.access.assertMember(u, projectId);
-    const patch: Record<string, unknown> = { status };
+    if (status === undefined && resolutionNote === undefined) {
+      throw new BadRequestException('Nothing to update');
+    }
+    const now = new Date().toISOString();
+    const patch: Record<string, unknown> = { updated_at: now };
     if (resolutionNote !== undefined) patch.resolution_note = resolutionNote;
-    if (status === 'resolved') patch.resolved_at = new Date().toISOString();
+    if (status !== undefined) {
+      patch.status = status;
+      // Closing (resolved/closed) stamps the time; reopening clears it.
+      patch.resolved_at = status === 'resolved' || status === 'closed' ? now : null;
+    }
     const { data, error } = await this.db()
       .from('complaints')
       .update(patch)

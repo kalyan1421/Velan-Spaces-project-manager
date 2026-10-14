@@ -13,7 +13,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { parsePagination } from '../../common/pagination';
 import { AuthenticatedUser } from '../../common/types/authenticated-user';
-import { CreateUpdateDto } from './dto/update.dto';
+import { CreateCommentDto, CreateUpdateDto } from './dto/update.dto';
 import { UpdatesService } from './updates.service';
 
 @ApiTags('updates')
@@ -44,6 +44,18 @@ export class UpdatesController {
     @Body() dto: CreateUpdateDto,
   ) {
     return this.updates.create(user, projectId, dto);
+  }
+
+  // Any member may comment; clients only on updates they can see.
+  @Post(':id/comments')
+  @ApiOperation({ summary: 'Comment on an update' })
+  addComment(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateCommentDto,
+  ) {
+    return this.updates.addComment(user, projectId, id, dto.text);
   }
 
   @Delete(':id')

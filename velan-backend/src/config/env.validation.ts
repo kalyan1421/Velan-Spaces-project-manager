@@ -25,6 +25,10 @@ export const envSchema = z.object({
   FIREBASE_SERVICE_ACCOUNT_PATH: z.string().optional(),
   FIREBASE_SERVICE_ACCOUNT_JSON: z.string().optional(),
 
+  // Google sign-in: comma-separated OAuth client IDs whose ID tokens are
+  // accepted (iOS, Android and web clients). Unset = Google sign-in disabled.
+  GOOGLE_CLIENT_IDS: z.string().optional(),
+
   // Comma-separated browser origins allowed by CORS (the Flutter web build).
   // Native mobile apps do not need CORS. In production, unset = CORS disabled.
   CORS_ORIGINS: z.string().optional(),

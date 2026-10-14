@@ -5,6 +5,8 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  MaxLength,
+  MinLength,
   Max,
   Min,
 } from 'class-validator';
@@ -52,4 +54,12 @@ export class CreateUpdateDto {
   @IsOptional()
   @IsBoolean()
   isClientViewable?: boolean;
+}
+
+export class CreateCommentDto {
+  @ApiProperty()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(2000)
+  text!: string;
 }
