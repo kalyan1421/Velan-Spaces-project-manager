@@ -128,14 +128,20 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
                     children: [
                       Row(
                         children: [
-                          Text('[${project.projectCode}] ${project.projectName}',
-                              style: const TextStyle(fontSize: 16)),
+                          Flexible(
+                            child: Text('[${project.projectCode}] ${project.projectName}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 16)),
+                          ),
                           const SizedBox(width: 8),
                           _buildStatusBadge(project),
                         ],
                       ),
                       Text(
                         '${project.clientName} • ${project.location}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11),
                       ),
                     ],

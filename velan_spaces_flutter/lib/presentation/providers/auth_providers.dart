@@ -158,7 +158,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserEntity?>> {
       }
       
       final result = await _authRepository.signInAnonymously();
-      return result.fold(
+      return await result.fold(
         (failure) {
           state = AsyncValue.error(failure.message, StackTrace.current);
           return false;
@@ -202,7 +202,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserEntity?>> {
       }
       
       final result = await _authRepository.signInAnonymously();
-      return result.fold(
+      return await result.fold(
         (failure) {
           state = AsyncValue.error(failure.message, StackTrace.current);
           return false;
@@ -238,7 +238,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserEntity?>> {
       final resolvedProjectId = project.id;
 
       final result = await _authRepository.signInAnonymously();
-      return result.fold(
+      return await result.fold(
         (failure) {
           state = AsyncValue.error(failure.message, StackTrace.current);
           return false;
@@ -262,7 +262,11 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserEntity?>> {
     final meta = _ref.read(currentUserMetaProvider);
     final userId = meta['id'] as String? ?? '';
     if (userId.isNotEmpty) {
-      await FCMService.instance.signOut(userId);
+      // Best-effort cleanup: never let a slow/unreachable APNs or network
+      // call keep the user from signing out.
+      await FCMService.instance
+          .signOut(userId)
+          .timeout(const Duration(seconds: 5), onTimeout: () {});
     }
     // Clear persisted session first
     await SessionService.clearSession();

@@ -20,11 +20,18 @@ class StaffScreen extends ConsumerStatefulWidget {
 class _StaffScreenState extends ConsumerState<StaffScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  int _shownTabIndex = 0;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 2, vsync: this)
+      ..addListener(() {
+        // Rebuild so the FAB label/action follow the selected tab.
+        if (mounted && _tabController.index != _shownTabIndex) {
+          setState(() => _shownTabIndex = _tabController.index);
+        }
+      });
   }
 
   @override

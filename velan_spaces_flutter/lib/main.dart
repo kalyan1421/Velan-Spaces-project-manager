@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -33,24 +35,17 @@ Future<void> main() async {
   final container = ProviderContainer();
 
   // Attempt to restore the previous session from secure storage
+  String? fcmUserId;
   try {
     final restored = await container
         .read(authNotifierProvider.notifier)
         .restoreSession();
     if (kDebugMode) print(restored ? '✅ Previous session restored' : 'ℹ️ No saved session');
 
-    // If session was restored, initialize FCM for this user
     if (restored) {
       final meta = container.read(currentUserMetaProvider);
       final userId = meta['id'] as String? ?? '';
-      if (userId.isNotEmpty) {
-        await FCMService.instance.initialize(
-          userId: userId,
-          onNotificationTap: (_) {
-            // Navigation handled inside App widget via GoRouter
-          },
-        );
-      }
+      if (userId.isNotEmpty) fcmUserId = userId;
     }
   } catch (e) {
     if (kDebugMode) print('⚠️ Session restore failed: $e');
@@ -62,5 +57,23 @@ Future<void> main() async {
       child: const App(),
     ),
   );
+
+  // Initialize FCM for the restored user AFTER the first frame is requested.
+  // It talks to APNs/network, so it must never block app startup.
+  if (fcmUserId != null) {
+    unawaited(
+      FCMService.instance
+          .initialize(
+            userId: fcmUserId,
+            onNotificationTap: (_) {
+              // Navigation handled inside App widget via GoRouter
+            },
+          )
+          .timeout(const Duration(seconds: 30))
+          .catchError((Object e) {
+        if (kDebugMode) print('⚠️ FCM init failed: $e');
+      }),
+    );
+  }
 }
 
