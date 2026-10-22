@@ -17,7 +17,9 @@ import {
   MemberLists,
   MemberRole,
   MemberRow,
+  MemberUserRow,
   planMemberSync,
+  projectMemberDirectory,
   visibleMembers,
 } from './project-members';
 
@@ -90,6 +92,32 @@ export class ProjectsService {
       role: user.role,
       canSeeBudget: await this.access.hasBudgetAccess(user, id),
     });
+  }
+
+  /**
+   * Names of the people on a project, for any member of it (workers and
+   * clients cannot list staff). Contact details only for head and managers.
+   */
+  async members(user: AuthenticatedUser, id: string) {
+    await this.access.assertMember(user, id);
+    // Head passes assertMember for any id; answer 404 for a project that doesn't exist.
+    if (user.role === 'head') await this.assertExists(id);
+
+    const { data: rows, error } = await this.db()
+      .from('project_members')
+      .select('project_id, user_id, member_role, has_budget_access')
+      .eq('project_id', id);
+    if (error) throw new Error(error.message);
+    const memberRows = (rows ?? []) as MemberRow[];
+    const ids = [...new Set(memberRows.map((r) => r.user_id))];
+    if (ids.length === 0) return [];
+
+    const { data: users, error: uErr } = await this.db()
+      .from('users')
+      .select('id, role, display_name, username, email, phone, trade, is_suspended')
+      .in('id', ids);
+    if (uErr) throw new Error(uErr.message);
+    return projectMemberDirectory(memberRows, (users ?? []) as MemberUserRow[], user.role);
   }
 
   async create(user: AuthenticatedUser, dto: CreateProjectDto) {
@@ -233,6 +261,12 @@ export class ProjectsService {
     ) {
       throw new ForbiddenException('Only the administrator assigns managers, clients and budget access');
     }
+  }
+
+  private async assertExists(id: string): Promise<void> {
+    const { data, error } = await this.db().from('projects').select('id').eq('id', id).maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) throw new NotFoundException('Project not found');
   }
 
   private async fetchRow(id: string): Promise<Record<string, unknown>> {

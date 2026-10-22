@@ -1,9 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { SupabaseService } from '../../supabase/supabase.service';
 import { ProjectAccessService } from '../../common/services/project-access.service';
 import { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { StorageService } from '../storage/storage.service';
+import { NotificationsService } from '../notifications/notifications.module';
+import { UPDATE_AUDIENCE, updateNotification } from '../notifications/notification-recipients';
 import { CreateUpdateDto } from './dto/update.dto';
 
 /** Site photos/videos go to update-images; documents attached to updates to project-files. */
@@ -19,10 +21,13 @@ function withPosterName(row: UpdateRow) {
 
 @Injectable()
 export class UpdatesService {
+  private readonly logger = new Logger(UpdatesService.name);
+
   constructor(
     private readonly supabase: SupabaseService,
     private readonly access: ProjectAccessService,
     private readonly storage: StorageService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   private db() {
@@ -73,6 +78,24 @@ export class UpdatesService {
       .select()
       .single();
     if (error) throw new Error(error.message);
+
+    // Client-visible updates alert the client(s) + project staff (never the poster).
+    // Fire-and-forget: a notification failure must never fail the post.
+    if (data.is_client_viewable !== false) {
+      void this.notifications
+        .notifyProjectMembers(
+          projectId,
+          updateNotification({
+            content: dto.content,
+            posterName: user.displayName,
+            updateId: data.id as string,
+            projectId,
+            senderId: user.id,
+          }),
+          UPDATE_AUDIENCE,
+        )
+        .catch((e: Error) => this.logger.warn(`Update ${data.id}: notify failed (${e.message})`));
+    }
     return { ...data, posted_by_name: user.displayName };
   }
 

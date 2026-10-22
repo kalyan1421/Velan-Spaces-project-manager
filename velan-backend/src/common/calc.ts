@@ -80,3 +80,81 @@ export function budgetBreakdown(
     currentSpend: round2(settlementsTotal + expenseTotal),
   };
 }
+
+export interface ClientPaymentsSummary {
+  /** Agreed project budget (0 when not set). */
+  budget: number;
+  /** Σ expense credits — payments received from the client. */
+  received: number;
+  /** budget − received; negative when the client has paid ahead. */
+  balance: number;
+  /** received / budget as 0–100 (capped), or null when no budget is set. */
+  receivedPercent: number | null;
+}
+
+/** What the client portal shows about money: budget vs payments received, nothing else. */
+export function clientPaymentsSummary(
+  budget: number | string | null | undefined,
+  credits: { amount: number | string }[],
+): ClientPaymentsSummary {
+  const b = round2(Number(budget) || 0);
+  const received = round2((credits ?? []).reduce((acc, c) => acc + (Number(c.amount) || 0), 0));
+  return {
+    budget: b,
+    received,
+    balance: round2(b - received),
+    receivedPercent: b > 0 ? Math.min(100, round2((received / b) * 100)) : null,
+  };
+}
+
+export interface QuoteBreakdown {
+  /** Σ item.amount (same as computeQuoteTotals). */
+  subtotal: number;
+  /** Discount in ₹ (a percent discount resolved against the subtotal). */
+  discount: number;
+  /** subtotal − discount. */
+  taxable: number;
+  /** GST in ₹, taken as grandTotal − taxable so the lines always add up. */
+  gstAmount: number;
+  /** Same value computeQuoteTotals returns (what the quotes row stores). */
+  grandTotal: number;
+  /** payable − grandTotal (0 unless roundAmounts). */
+  roundOff: number;
+  /** grandTotal rounded to whole rupees when roundAmounts, else grandTotal. */
+  payable: number;
+}
+
+/**
+ * Totals block for a quote document: subtotal → discount → GST → round-off →
+ * payable. Built on computeQuoteTotals so the stored grand total and the
+ * document never disagree by more than the round-off line.
+ */
+export function quoteBreakdown(
+  sections: QuoteSectionLike[],
+  discountType: DiscountType,
+  discountValue: number,
+  gstPercent: number,
+  roundAmounts = false,
+): QuoteBreakdown {
+  const { subtotal, grandTotal } = computeQuoteTotals(
+    sections,
+    discountType,
+    discountValue,
+    gstPercent,
+  );
+  const discount = round2(
+    discountType === 'percent' ? (subtotal * (discountValue || 0)) / 100 : discountValue || 0,
+  );
+  const taxable = round2(subtotal - discount);
+  const gstAmount = round2(grandTotal - taxable);
+  const payable = roundAmounts ? Math.round(grandTotal) : grandTotal;
+  return {
+    subtotal,
+    discount,
+    taxable,
+    gstAmount,
+    grandTotal,
+    roundOff: round2(payable - grandTotal),
+    payable,
+  };
+}

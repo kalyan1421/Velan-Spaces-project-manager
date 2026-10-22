@@ -127,3 +127,126 @@ export function visibleMembers(
   if (role === 'worker') return { managerIds: lists.managerIds, workerIds: lists.workerIds };
   return { workerIds: lists.workerIds };
 }
+
+// ------------------------------------------------------------------ directory
+
+/**
+ * `GET /projects/:id/members`: who is on a project, with names, for every
+ * member (workers and clients cannot list staff). One entry per membership,
+ * plus a `budgetAccess` entry for each manager who holds budget access.
+ */
+export type MemberType = MemberRole | 'budgetAccess';
+export type ViewerRole = 'head' | 'manager' | 'worker' | 'client';
+
+/** The `users` columns the directory reads. */
+export interface MemberUserRow {
+  id: string;
+  role: string | null;
+  display_name: string | null;
+  username?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  trade?: string | null;
+  is_suspended?: boolean | null;
+}
+
+export interface ProjectMemberEntry {
+  userId: string;
+  fullName: string;
+  /** The account's role (users.role). */
+  role: string | null;
+  memberType: MemberType;
+  trade: string | null;
+  /** No avatar column yet; always null (kept so clients can rely on the key). */
+  avatarUrl: null;
+  // Head and managers only:
+  email?: string | null;
+  phone?: string | null;
+  username?: string | null;
+  isSuspended?: boolean;
+}
+
+const MEMBER_TYPE_ORDER: MemberType[] = ['manager', 'worker', 'client', 'budgetAccess'];
+
+const GENERIC_NAME: Record<MemberType, string> = {
+  manager: 'Project manager',
+  worker: 'Worker',
+  client: 'Client',
+  budgetAccess: 'Project manager',
+};
+
+/** Worker accounts sign in with a hidden `<username>@<domain>.invalid` address; never expose it. */
+export function visibleEmail(email: string | null | undefined): string | null {
+  const e = typeof email === 'string' ? email.trim() : '';
+  if (!e || /\.invalid$/i.test(e)) return null;
+  return e;
+}
+
+const clean = (v: string | null | undefined): string | null => {
+  const t = typeof v === 'string' ? v.trim() : '';
+  return t === '' ? null : t;
+};
+
+/** Member types a viewer may see: client accounts and budget access are staff-only facts. */
+export function visibleMemberTypes(viewer: ViewerRole): MemberType[] {
+  if (viewer === 'head' || viewer === 'manager') return [...MEMBER_TYPE_ORDER];
+  return ['manager', 'worker'];
+}
+
+/**
+ * Membership rows of ONE project + their user rows -> the directory a viewer
+ * may see. Workers and clients get names (and trades) only: no email, phone,
+ * login name, suspension state, client accounts or budget access.
+ */
+export function projectMemberDirectory(
+  rows: MemberRow[],
+  users: MemberUserRow[],
+  viewer: ViewerRole,
+): ProjectMemberEntry[] {
+  const staff = viewer === 'head' || viewer === 'manager';
+  const allowed = new Set(visibleMemberTypes(viewer));
+  const userById = new Map(users.map((u) => [u.id, u]));
+  const seen = new Set<string>();
+  const out: ProjectMemberEntry[] = [];
+
+  const push = (userId: string, memberType: MemberType) => {
+    if (!allowed.has(memberType)) return;
+    const key = `${userId}:${memberType}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const u = userById.get(userId);
+    // Staff may fall back to the login name; others only ever see a real name.
+    const staffFallback = staff
+      ? (clean(u?.username) ?? visibleEmail(u?.email)?.split('@')[0] ?? null)
+      : null;
+    const name = clean(u?.display_name) ?? staffFallback ?? GENERIC_NAME[memberType];
+    const entry: ProjectMemberEntry = {
+      userId,
+      fullName: name,
+      role: u?.role ?? null,
+      memberType,
+      trade: clean(u?.trade),
+      avatarUrl: null,
+    };
+    if (staff) {
+      entry.email = visibleEmail(u?.email);
+      entry.phone = clean(u?.phone);
+      entry.username = clean(u?.username);
+      entry.isSuspended = u?.is_suspended === true;
+    }
+    out.push(entry);
+  };
+
+  for (const r of rows) {
+    push(r.user_id, r.member_role);
+    if (r.member_role === 'manager' && r.has_budget_access) push(r.user_id, 'budgetAccess');
+  }
+
+  const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true });
+  return out.sort(
+    (a, b) =>
+      MEMBER_TYPE_ORDER.indexOf(a.memberType) - MEMBER_TYPE_ORDER.indexOf(b.memberType) ||
+      collator.compare(a.fullName, b.fullName) ||
+      a.userId.localeCompare(b.userId),
+  );
+}

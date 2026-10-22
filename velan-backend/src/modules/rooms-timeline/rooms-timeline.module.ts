@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   Get,
   Injectable,
+  Logger,
   Module,
   NotFoundException,
   Param,
@@ -42,6 +43,12 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { StorageService } from '../storage/storage.service';
+import { NotificationsService } from '../notifications/notifications.module';
+import {
+  newTaskAssignments,
+  TaskRef,
+  taskAssignmentNotification,
+} from '../notifications/notification-recipients';
 import {
   ChecklistItem,
   derivePhaseStatus,
@@ -218,13 +225,23 @@ interface TaskRow {
   [k: string]: unknown;
 }
 
+type TaskRefRow = { id: string; title?: unknown; assigned_worker_id: string | null };
+const toTaskRef = (t: TaskRefRow): TaskRef => ({
+  id: t.id,
+  title: (t.title as string | null | undefined) ?? null,
+  assignedWorkerId: t.assigned_worker_id ?? null,
+});
+
 // ---------------------------------------------------------------- Service
 @Injectable()
 class RoomsTimelineService {
+  private readonly logger = new Logger('RoomsTimelineService');
+
   constructor(
     private readonly supabase: SupabaseService,
     private readonly access: ProjectAccessService,
     private readonly storage: StorageService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   private db() {
@@ -308,6 +325,7 @@ class RoomsTimelineService {
     await this.assertProjectWorkers(projectId, workerIds);
     await this.assertProjectRooms(projectId, roomIds);
     this.assertUniqueIds(dto);
+    const previousTasks = await this.taskAssignmentsSnapshot(projectId);
 
     const phases = dto.phases.map((p) => {
       const tasks = p.tasks.map((t) => ({
@@ -328,7 +346,12 @@ class RoomsTimelineService {
     if (error) throw new Error(error.message);
 
     await this.persistProgress(projectId, phases);
-    return this.loadTimeline(projectId);
+    const timeline = await this.loadTimeline(projectId);
+    if (previousTasks) {
+      const after = timeline.flatMap((p) => (p.tasks as TaskRow[]).map(toTaskRef));
+      this.notifyAssignments(u, projectId, previousTasks, after);
+    }
+    return timeline;
   }
 
   /** Progress on one task: status, checklist, comments, photo proofs. */
@@ -422,7 +445,40 @@ class RoomsTimelineService {
     if (upErr) throw new Error(upErr.message);
 
     await this.refreshPhaseAndProject(projectId, task.phase_id);
+    if (dto.assignedWorkerId !== undefined) {
+      this.notifyAssignments(u, projectId, [toTaskRef(task)], [toTaskRef(updated as TaskRow)]);
+    }
     return updated;
+  }
+
+  // ------------------------------------------------------------ notifications
+  /** Current task -> worker assignments; null (skip notifying) if unreadable. */
+  private async taskAssignmentsSnapshot(projectId: string): Promise<TaskRef[] | null> {
+    try {
+      const { data, error } = await this.db()
+        .from('timeline_tasks')
+        .select('id, title, assigned_worker_id')
+        .eq('project_id', projectId);
+      if (error) throw new Error(error.message);
+      return ((data ?? []) as TaskRefRow[]).map(toTaskRef);
+    } catch (e) {
+      this.logger.warn(`Timeline ${projectId}: could not read assignments (${(e as Error).message})`);
+      return null;
+    }
+  }
+
+  /** Tell each worker about tasks newly (re)assigned to them. Fire-and-forget. */
+  private notifyAssignments(u: AuthenticatedUser, projectId: string, before: TaskRef[], after: TaskRef[]) {
+    try {
+      const byWorker = newTaskAssignments(before, after, u.id);
+      for (const [workerId, tasks] of byWorker) {
+        void this.notifications
+          .notifyUsers([workerId], taskAssignmentNotification(tasks, projectId, u.id, u.displayName))
+          .catch((e: Error) => this.logger.warn(`Task assignment notify failed (${e.message})`));
+      }
+    } catch (e) {
+      this.logger.warn(`Task assignment notify failed (${(e as Error).message})`);
+    }
   }
 
   // ------------------------------------------------------------ helpers

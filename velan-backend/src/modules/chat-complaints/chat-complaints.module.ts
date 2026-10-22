@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   Injectable,
+  Logger,
   Module,
   Param,
   ParseUUIDPipe,
@@ -26,6 +27,13 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { parsePagination } from '../../common/pagination';
 import { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { NotificationsService } from '../notifications/notifications.module';
+import {
+  chatAudience,
+  chatNotification,
+  complaintStatusNotification,
+  complaintStatusRecipients,
+  preview,
+} from '../notifications/notification-recipients';
 import { StorageService } from '../storage/storage.service';
 
 const ATTACHMENT_BUCKETS = ['project-files'] as const;
@@ -76,6 +84,8 @@ class UpdateComplaintDto {
 // ---------------------------------------------------------------- Service
 @Injectable()
 class ChatComplaintsService {
+  private readonly logger = new Logger('ChatComplaintsService');
+
   constructor(
     private readonly supabase: SupabaseService,
     private readonly access: ProjectAccessService,
@@ -119,6 +129,22 @@ class ChatComplaintsService {
       .select()
       .single();
     if (error) throw new Error(error.message);
+
+    // Client <-> staff: alert the other side (never the sender). Fire-and-forget.
+    void this.notifications
+      .notifyProjectMembers(
+        projectId,
+        chatNotification({
+          content: dto.content,
+          messageType: dto.messageType,
+          senderName: u.displayName,
+          messageId: data.id as string,
+          projectId,
+          senderId: u.id,
+        }),
+        chatAudience(u.role),
+      )
+      .catch((e: Error) => this.logger.warn(`Chat ${data.id}: notify failed (${e.message})`));
     return data;
   }
 
@@ -154,12 +180,15 @@ class ChatComplaintsService {
       .single();
     if (error) throw new Error(error.message);
 
-    // Fire-and-forget: alert project managers + heads.
-    this.notifications
+    // Fire-and-forget: alert project managers + heads (not the person who raised it).
+    void this.notifications
       .notifyProjectStaff(projectId, {
         title: 'New complaint raised',
-        body: dto.title,
+        body: preview(dto.title, 140),
         type: 'complaint',
+        entityId: data.id as string,
+        senderId: u.id,
+        senderName: u.displayName ?? undefined,
       })
       .catch(() => undefined); // never let a notification failure break the request
     return data;
@@ -176,6 +205,7 @@ class ChatComplaintsService {
     if (status === undefined && resolutionNote === undefined) {
       throw new BadRequestException('Nothing to update');
     }
+    const before = status !== undefined ? await this.complaintSnapshot(projectId, id) : null;
     const now = new Date().toISOString();
     const patch: Record<string, unknown> = { updated_at: now };
     if (resolutionNote !== undefined) patch.resolution_note = resolutionNote;
@@ -192,8 +222,57 @@ class ChatComplaintsService {
       .select()
       .single();
     if (error) throw new Error(error.message);
+
+    if (status !== undefined && before && before.status !== status) {
+      void this.notifyComplaintStatus(u, projectId, data as ComplaintRow).catch((e: Error) =>
+        this.logger.warn(`Complaint ${id}: notify failed (${e.message})`),
+      );
+    }
     return data;
   }
+
+  /** Status + creator before a change; null (skip notifying) if it can't be read. */
+  private async complaintSnapshot(projectId: string, id: string) {
+    try {
+      const { data, error } = await this.db()
+        .from('complaints')
+        .select('status, created_by')
+        .eq('id', id)
+        .eq('project_id', projectId)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return data as { status: string; created_by: string | null } | null;
+    } catch (e) {
+      this.logger.warn(`Complaint ${id}: could not read previous status (${(e as Error).message})`);
+      return null;
+    }
+  }
+
+  /** Tell the client(s) and whoever raised it that the status changed. */
+  private async notifyComplaintStatus(u: AuthenticatedUser, projectId: string, row: ComplaintRow) {
+    const members = await this.notifications.projectMembers(projectId);
+    const recipients = complaintStatusRecipients(members, row.created_by, u.id);
+    await this.notifications.notifyUsers(
+      recipients,
+      complaintStatusNotification({
+        complaintTitle: row.title,
+        status: row.status,
+        resolutionNote: row.resolution_note,
+        complaintId: row.id,
+        projectId,
+        senderId: u.id,
+        senderName: u.displayName,
+      }),
+    );
+  }
+}
+
+interface ComplaintRow {
+  id: string;
+  title: string | null;
+  status: string;
+  created_by: string | null;
+  resolution_note: string | null;
 }
 
 // ---------------------------------------------------------------- Controller

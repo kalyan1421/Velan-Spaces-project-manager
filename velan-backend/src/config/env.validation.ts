@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+/** Optional var where an empty value (`FOO=` in .env) means "unset". */
+const blankToUndefined = (v: unknown) => (typeof v === 'string' && v.trim() === '' ? undefined : v);
+
 /**
  * Typed, validated environment. The app refuses to boot if required vars
  * are missing or malformed (fail fast instead of mysterious runtime errors).
@@ -46,6 +49,18 @@ export const envSchema = z.object({
   // Number of reverse-proxy hops in front of the app (Render/Railway = 1) so
   // rate limiting sees the real client IP.
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(0),
+
+  // Email (SMTP via nodemailer). Unset SMTP_HOST = email disabled (logged once).
+  SMTP_HOST: z.preprocess(blankToUndefined, z.string().optional()),
+  SMTP_PORT: z.preprocess(blankToUndefined, z.coerce.number().int().min(1).max(65535).optional()),
+  // true = implicit TLS (port 465). Default: true only when SMTP_PORT is 465.
+  SMTP_SECURE: z.preprocess(blankToUndefined, z.enum(['true', 'false']).optional()),
+  SMTP_USER: z.preprocess(blankToUndefined, z.string().optional()),
+  SMTP_PASS: z.preprocess(blankToUndefined, z.string().optional()),
+  // Sender, e.g. "Velan Spaces <no-reply@example.com>". Defaults to SMTP_USER.
+  MAIL_FROM: z.preprocess(blankToUndefined, z.string().optional()),
+  // Comma-separated recipients of website-enquiry emails. Unset = all active heads.
+  ENQUIRY_NOTIFY_EMAILS: z.preprocess(blankToUndefined, z.string().optional()),
 });
 
 export type Env = z.infer<typeof envSchema>;

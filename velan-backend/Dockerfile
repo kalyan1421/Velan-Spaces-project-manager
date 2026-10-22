@@ -38,6 +38,9 @@ WORKDIR /app
 # Code stays root-owned (read-only to the app user); the API writes nothing to disk.
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+# Runtime files read from <cwd>/assets: quote PDF fonts (Noto Sans, OFL licence
+# alongside) and the logo. WORKDIR is /app, so they resolve to /app/assets.
+COPY assets ./assets
 COPY package.json ./
 USER node
 EXPOSE 3000

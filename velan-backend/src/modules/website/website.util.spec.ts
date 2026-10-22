@@ -4,9 +4,11 @@ import {
   isAllowedPortfolioUrl,
   cleanMultiLine,
   cleanSingleLine,
+  invalidImageUrls,
   isHoneypotTripped,
   MAX_SLUG_LENGTH,
   normalizePhone,
+  normalizeSupabaseBase,
   parseCategory,
   PortfolioRow,
   portfolioPublicPrefix,
@@ -215,6 +217,70 @@ describe('isAllowedPortfolioUrl', () => {
   it('rejects non-strings', () => {
     expect(isAllowedPortfolioUrl(null, SB)).toBe(false);
     expect(isAllowedPortfolioUrl(42, SB)).toBe(false);
+  });
+
+  describe('with SUPABASE_URL + SUPABASE_PUBLIC_URL', () => {
+    const INTERNAL = 'http://kong:8000';
+    const PUBLIC = 'https://supabase.example.com/';
+    const BASES = [PUBLIC, INTERNAL];
+
+    it('accepts public URLs under either prefix', () => {
+      expect(
+        isAllowedPortfolioUrl(
+          'https://supabase.example.com/storage/v1/object/public/portfolio/items/x/a.jpg',
+          BASES,
+        ),
+      ).toBe(true);
+      expect(
+        isAllowedPortfolioUrl('http://kong:8000/storage/v1/object/public/portfolio/items/x/a.jpg', BASES),
+      ).toBe(true);
+    });
+
+    it('ignores unset bases (SUPABASE_PUBLIC_URL not configured)', () => {
+      expect(isAllowedPortfolioUrl(`${PREFIX}items/x/a.jpg`, [undefined, SB, null, ''])).toBe(true);
+      expect(isAllowedPortfolioUrl(`${PREFIX}items/x/a.jpg`, [undefined, ''])).toBe(false);
+      expect(isAllowedPortfolioUrl('/storage/v1/object/public/portfolio/items/x/a.jpg', [''])).toBe(false);
+    });
+
+    it.each([
+      ['other host', 'https://evil.example.com/storage/v1/object/public/portfolio/a.jpg'],
+      ['host suffix trick', 'https://supabase.example.com.evil.com/storage/v1/object/public/portfolio/a.jpg'],
+      ['other bucket on the public host', 'https://supabase.example.com/storage/v1/object/public/avatars/a.jpg'],
+      ['signed URL on the public host', 'https://supabase.example.com/storage/v1/object/sign/portfolio/a.jpg?token=x'],
+      ['traversal on the internal host', 'http://kong:8000/storage/v1/object/public/portfolio/items/../../x.jpg'],
+      ['query on the public host', 'https://supabase.example.com/storage/v1/object/public/portfolio/a.jpg?x=1'],
+    ])('still rejects: %s', (_label, url) => {
+      expect(isAllowedPortfolioUrl(url, BASES)).toBe(false);
+    });
+  });
+});
+
+describe('normalizeSupabaseBase', () => {
+  it.each([
+    ['https://ABC.supabase.co/', 'https://abc.supabase.co'],
+    ['https://abc.supabase.co:443', 'https://abc.supabase.co'],
+    ['http://kong:8000', 'http://kong:8000'],
+    ['  http://127.0.0.1:54321//  ', 'http://127.0.0.1:54321'],
+    ['not a url/', 'not a url'],
+  ])('%s -> %s', (input, expected) => {
+    expect(normalizeSupabaseBase(input)).toBe(expected);
+  });
+});
+
+describe('invalidImageUrls', () => {
+  const bases = ['https://supabase.example.com', 'http://kong:8000'];
+  const ok = (base: string) => `${base}/storage/v1/object/public/portfolio/items/x/a.jpg`;
+
+  it('returns only the URLs outside every configured prefix', () => {
+    const bad = 'https://evil.example.com/a.jpg';
+    expect(
+      invalidImageUrls({ coverImageUrl: ok(bases[0]), imageUrls: [ok(bases[1]), bad] }, bases),
+    ).toEqual([bad]);
+  });
+
+  it('still accepts a single SUPABASE_URL string', () => {
+    expect(invalidImageUrls({ coverImageUrl: `${PREFIX}items/a.jpg` }, SB)).toEqual([]);
+    expect(invalidImageUrls({ coverImageUrl: null, imageUrls: [] }, SB)).toEqual([]);
   });
 });
 

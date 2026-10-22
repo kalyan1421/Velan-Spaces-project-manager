@@ -9,6 +9,8 @@ import { SignStorageRefsInterceptor } from './common/interceptors/sign-storage-r
 import { SharedModule } from './common/shared.module';
 import { SupabaseModule } from './supabase/supabase.module';
 import { PushModule } from './push/push.module';
+import { MailModule } from './mail/mail.module';
+import { THROTTLERS } from './common/throttle';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
@@ -32,11 +34,13 @@ import { WebsiteModule } from './modules/website/website.module';
       isGlobal: true,
       validate: validateEnv,
     }),
-    // Global rate limit (per IP). Login/refresh get a much stricter limit.
-    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 120 }]),
+    // Per-IP + per-account rate limits (see common/throttle.ts). Login,
+    // refresh and links get much stricter per-IP limits via @Throttle.
+    ThrottlerModule.forRoot(THROTTLERS),
     SharedModule,
     SupabaseModule,
     PushModule,
+    MailModule,
     AuthModule,
     StorageModule,
     HealthModule,

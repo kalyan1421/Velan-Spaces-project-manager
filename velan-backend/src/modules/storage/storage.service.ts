@@ -4,8 +4,13 @@ import { Env } from '../../config/env.validation';
 import { SupabaseService } from '../../supabase/supabase.service';
 import { ProjectAccessService } from '../../common/services/project-access.service';
 import { AuthenticatedUser } from '../../common/types/authenticated-user';
-import { evaluateStoragePolicy, StorageMode } from './storage-policy';
-import { isRef, normalizeProjectRef, parseStorageRef, publicizeStorageUrl } from './storage-refs';
+import {
+  clientMayDownloadFileObject,
+  evaluateStoragePolicy,
+  FILE_ROW_BUCKETS,
+  StorageMode,
+} from './storage-policy';
+import { isRef, normalizeProjectRef, parseStorageRef, publicizeStorageUrl, REF_PREFIX } from './storage-refs';
 
 /**
  * Brokers Supabase Storage access. The client never holds storage keys:
@@ -103,6 +108,23 @@ export class StorageService {
     }
     if (decision.projectId) {
       await this.access.assertMember(user, decision.projectId);
+      if (mode === 'download' && user.role === 'client' && FILE_ROW_BUCKETS.includes(bucket)) {
+        await this.assertClientMaySeeFile(decision.projectId, bucket, path);
+      }
+    }
+  }
+
+  /** Clients only get files staff shared with them (files.client_visible). */
+  private async assertClientMaySeeFile(projectId: string, bucket: string, path: string) {
+    const { data, error } = await this.supabase
+      .admin()
+      .from('files')
+      .select('client_visible')
+      .eq('project_id', projectId)
+      .eq('storage_path', `${REF_PREFIX}${bucket}/${path}`);
+    if (error) throw new BadRequestException('Could not check file access');
+    if (!clientMayDownloadFileObject(data ?? [])) {
+      throw new ForbiddenException('This file has not been shared with you');
     }
   }
 

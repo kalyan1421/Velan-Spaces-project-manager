@@ -35,7 +35,7 @@ import { ProjectAccessService } from '../../common/services/project-access.servi
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AuthenticatedUser } from '../../common/types/authenticated-user';
-import { budgetBreakdown } from '../../common/calc';
+import { budgetBreakdown, clientPaymentsSummary } from '../../common/calc';
 import { StorageService } from '../storage/storage.service';
 
 /** numeric(14,2) upper bound. */
@@ -277,6 +277,40 @@ class BudgetService {
     };
   }
 
+  // ------------------------------------------------------------ client view
+  /**
+   * Budget vs payments received, for the client portal. Clients of the
+   * project may read it; staff need budget access. Never includes spend,
+   * settlements, expenses, estimated cost or payment notes/proofs.
+   */
+  async clientPayments(u: AuthenticatedUser, projectId: string) {
+    if (u.role === 'client') await this.access.assertMember(u, projectId);
+    else await this.access.assertBudgetAccess(u, projectId);
+    const [project, credits] = await Promise.all([
+      this.db().from('projects').select('budget').eq('id', projectId).maybeSingle(),
+      this.db()
+        .from('expenses')
+        .select('id, amount, expense_date, payment_method, created_at')
+        .eq('project_id', projectId)
+        .eq('type', 'credit')
+        .order('expense_date', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false }),
+    ]);
+    for (const r of [project, credits]) if (r.error) throw new Error(r.error.message);
+    if (!project.data) throw new NotFoundException('Project not found');
+
+    const rows = credits.data ?? [];
+    return {
+      ...clientPaymentsSummary(project.data.budget, rows),
+      payments: rows.map((r) => ({
+        id: r.id,
+        amount: Number(r.amount) || 0,
+        date: r.expense_date ?? r.created_at,
+        paymentMethod: r.payment_method ?? null,
+      })),
+    };
+  }
+
   // ------------------------------------------------------------ legacy
   async listTransactions(u: AuthenticatedUser, projectId: string) {
     await this.access.assertBudgetAccess(u, projectId);
@@ -410,8 +444,23 @@ class BudgetController {
   }
 }
 
+// The one money view clients get: budget vs their own payments.
+@ApiTags('budget')
+@ApiBearerAuth()
+@Roles('head', 'manager', 'client')
+@Controller('projects/:projectId')
+class ClientPaymentsController {
+  constructor(private readonly svc: BudgetService) {}
+
+  @Get('client-payments')
+  @ApiOperation({ summary: 'Budget, payments received from the client, balance (client portal)' })
+  clientPayments(@CurrentUser() u: AuthenticatedUser, @Param('projectId', ParseUUIDPipe) p: string) {
+    return this.svc.clientPayments(u, p);
+  }
+}
+
 @Module({
-  controllers: [BudgetController],
+  controllers: [BudgetController, ClientPaymentsController],
   providers: [BudgetService],
 })
 export class BudgetModule {}
