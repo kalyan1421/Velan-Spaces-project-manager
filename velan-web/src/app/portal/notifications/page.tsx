@@ -4,7 +4,7 @@ import { NotificationsList } from "@/components/app-shell/notifications-list";
 import { PageHeader } from "@/components/app-shell/page-header";
 import { PageSkeleton } from "@/components/app-shell/shell-skeleton";
 import { apiFetch } from "@/lib/api/server";
-import type { Notification } from "@/lib/api/types";
+import type { AppNotification } from "@/lib/api/notifications";
 
 export const metadata: Metadata = { title: "Notifications" };
 
@@ -20,6 +20,6 @@ export default function PortalNotificationsPage() {
 }
 
 async function PortalNotifications() {
-  const list = await apiFetch<Notification[] | null>("notifications");
-  return <NotificationsList initial={Array.isArray(list) ? list : []} projectBasePath="/portal/projects" />;
+  const list = await apiFetch<AppNotification[] | null>("notifications");
+  return <NotificationsList initial={Array.isArray(list) ? list : []} audience="client" />;
 }

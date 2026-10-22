@@ -62,6 +62,19 @@ const PROJECT_BUCKET_UPLOADERS: Record<string, AppRole[]> = {
   'update-images': FIELD_STAFF,
 };
 
+/** Buckets whose objects can back a `files` row (see designs-files FILE_BUCKETS). */
+export const FILE_ROW_BUCKETS = ['project-files', 'designs'];
+
+/**
+ * May a client download an object, given the `files` rows that point at it?
+ * Objects no file row points at (chat attachments, timeline proofs, design
+ * images) stay downloadable for project members; objects that only hidden
+ * file rows point at are staff-only, so knowing the path isn't enough.
+ */
+export function clientMayDownloadFileObject(rows: { client_visible: boolean }[]): boolean {
+  return rows.length === 0 || rows.some((r) => r.client_visible);
+}
+
 /**
  * Pure authorization decision for a signed-URL request. The caller must still
  * verify project membership when `projectId` is returned.

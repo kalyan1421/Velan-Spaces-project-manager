@@ -33,6 +33,9 @@ services:
       # (permissive CORS, Swagger on) or move the port the web app expects.
       NODE_ENV: production
       PORT: "3000"
+      # Web app origin used in invite / password-reset links and enquiry emails.
+      # Same value as the web's APP_URL (the API default is http://localhost:3100).
+      APP_PUBLIC_URL: ${APP_URL:?Set APP_URL (public https URL of the web app) in .env}
     # Published on loopback only: the internet reaches the API through the reverse
     # proxy (Docker-published ports bypass host firewalls like ufw). Set BIND_ADDR
     # only if a proxy on another machine must reach it.

@@ -9,23 +9,26 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { isApiError } from "@/lib/api/errors";
 import {
   SIGNED_URL_REFRESH_MS,
-  contentApi,
   contentKeys,
   type Design,
   type ProjectFile,
 } from "@/lib/api/project-content";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { designApi, ensureApprovalDesigns, type ApprovalDesign } from "../designs/design-api";
 import { downloadUrl, formatBytes } from "../media/media";
+import { ensureSharedFiles, fileApi, type SharedFile } from "./file-api";
 import { FileTypeIcon } from "./file-icon";
 import { documentRows } from "./file-utils";
 
 const ICON_LINK = buttonVariants({ variant: "outline", size: "icon" });
 
 /**
- * Client "Documents": attached quotation PDFs (stored as designs of type
- * Quotation) and project files, each with view and download (R-E3).
- * Links are the API's short-lived signed URLs, refreshed in the background.
+ * Client "Files & documents" (read-only): attached quotation PDFs (stored as
+ * designs of type Quotation) and the project files shared with the client —
+ * the API returns only those to a client — each with view and download
+ * (R-E1, R-E3). Links are the API's short-lived signed URLs, refreshed in the
+ * background.
  */
 export function DocumentsList({
   projectId,
@@ -33,20 +36,22 @@ export function DocumentsList({
   initialFiles,
 }: {
   projectId: string;
-  initialDesigns: Design[] | null;
-  initialFiles: ProjectFile[] | null;
+  initialDesigns: (Design | ApprovalDesign)[] | null;
+  initialFiles: (ProjectFile | SharedFile)[] | null;
 }) {
   const designs = useQuery({
     queryKey: contentKeys.designs(projectId),
-    queryFn: ({ signal }) => contentApi.designs(projectId, { signal }),
-    initialData: initialDesigns ?? undefined,
+    queryFn: ({ signal }) => designApi.list(projectId, { signal }),
+    initialData: initialDesigns ? ensureApprovalDesigns(initialDesigns) : undefined,
     refetchInterval: SIGNED_URL_REFRESH_MS,
+    select: ensureApprovalDesigns,
   });
   const files = useQuery({
     queryKey: contentKeys.files(projectId),
-    queryFn: ({ signal }) => contentApi.files(projectId, { signal }),
-    initialData: initialFiles ?? undefined,
+    queryFn: ({ signal }) => fileApi.list(projectId, { signal }),
+    initialData: initialFiles ? ensureSharedFiles(initialFiles) : undefined,
     refetchInterval: SIGNED_URL_REFRESH_MS,
+    select: ensureSharedFiles,
   });
 
   const rows = useMemo(() => documentRows(designs.data ?? [], files.data ?? []), [designs.data, files.data]);
@@ -88,7 +93,7 @@ export function DocumentsList({
       <StateMessage
         icon={FileStack}
         title="No documents yet"
-        description="Quotations and documents your project team shares will appear here."
+        description="Quotations, drawings and documents your project team shares with you will appear here."
       />
     );
   } else {

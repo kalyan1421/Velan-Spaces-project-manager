@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:velan_spaces_flutter/core/utils/account_validators.dart';
+import 'package:velan_spaces_flutter/presentation/widgets/common/share_link_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:velan_spaces_flutter/domain/entities/manager_entity.dart';
 import 'package:velan_spaces_flutter/presentation/providers/worker_manager_providers.dart';
@@ -17,7 +19,6 @@ class _EditManagerDialogState extends ConsumerState<EditManagerDialog> {
   late final TextEditingController _nameController;
   late final TextEditingController _phoneController;
   late final TextEditingController _emailController;
-  late final TextEditingController _passwordController;
   late bool _isSuspended;
   bool _isSubmitting = false;
 
@@ -27,7 +28,6 @@ class _EditManagerDialogState extends ConsumerState<EditManagerDialog> {
     _nameController = TextEditingController(text: widget.manager.name);
     _phoneController = TextEditingController(text: widget.manager.phone);
     _emailController = TextEditingController(text: widget.manager.email);
-    _passwordController = TextEditingController(text: widget.manager.password);
     _isSuspended = widget.manager.isSuspended;
   }
 
@@ -36,7 +36,6 @@ class _EditManagerDialogState extends ConsumerState<EditManagerDialog> {
     _nameController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
-    _passwordController.dispose();
     super.dispose();
   }
 
@@ -49,8 +48,7 @@ class _EditManagerDialogState extends ConsumerState<EditManagerDialog> {
       managerId: widget.manager.id,
       name: _nameController.text.trim(),
       phone: _phoneController.text.trim(),
-      email: _emailController.text.trim(),
-      password: _passwordController.text.trim(),
+      email: _emailController.text.trim().toLowerCase(),
       isSuspended: _isSuspended,
     );
 
@@ -60,11 +58,36 @@ class _EditManagerDialogState extends ConsumerState<EditManagerDialog> {
         const SnackBar(content: Text('Manager updated successfully')),
       );
     } else if (mounted) {
+      final error = ref.read(workerManagerControllerProvider).error;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Error updating manager')),
+        SnackBar(content: Text('Could not update manager: $error')),
       );
       setState(() => _isSubmitting = false);
     }
+  }
+
+  /// Passwords can't be read or typed in any more: the manager sets a new
+  /// one through a one-time link.
+  Future<void> _shareResetLink() async {
+    final url = await ref
+        .read(workerManagerControllerProvider.notifier)
+        .createResetLink(widget.manager.id);
+    if (!mounted) return;
+    if (url == null) {
+      final error = ref.read(workerManagerControllerProvider).error;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not create link: $error')),
+      );
+      return;
+    }
+    await showShareLinkSheet(
+      context,
+      title: 'Password reset link',
+      message: 'Send this to ${widget.manager.name}. It lets them set a new password once, '
+          'within 24 hours. They keep signing in with ${widget.manager.email}.',
+      url: url,
+      shareText: 'Velan Spaces: set your new password here (valid 24 hours)',
+    );
   }
 
   @override
@@ -92,18 +115,7 @@ class _EditManagerDialogState extends ConsumerState<EditManagerDialog> {
               validator: (val) =>
                   val == null || val.trim().isEmpty ? 'Name is required' : null,
             ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _passwordController,
-              decoration: const InputDecoration(
-                labelText: 'Password',
-                prefixIcon: Icon(Icons.lock),
-                border: OutlineInputBorder(),
-              ),
-              obscureText: true,
-              validator: (val) =>
-                  val == null || val.trim().isEmpty ? 'Password is required' : null,
-            ),
+
             const SizedBox(height: 16),
             TextFormField(
               controller: _phoneController,
@@ -117,12 +129,14 @@ class _EditManagerDialogState extends ConsumerState<EditManagerDialog> {
             const SizedBox(height: 16),
             TextFormField(
               controller: _emailController,
+              autocorrect: false,
               decoration: const InputDecoration(
-                labelText: 'Email',
+                labelText: 'Email (sign-in)',
                 prefixIcon: Icon(Icons.email),
                 border: OutlineInputBorder(),
               ),
               keyboardType: TextInputType.emailAddress,
+              validator: AccountValidators.email,
             ),
             const SizedBox(height: 16),
             SwitchListTile(
@@ -148,6 +162,16 @@ class _EditManagerDialogState extends ConsumerState<EditManagerDialog> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Text('Save Changes'),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _isSubmitting ? null : _shareResetLink,
+              icon: const Icon(Icons.lock_reset),
+              label: const Text('Create password reset link'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
             ),
           ],
         ),

@@ -41,4 +41,17 @@ export class SupabaseService implements OnModuleInit {
   anon(): SupabaseClient {
     return this.anonClient;
   }
+
+  /**
+   * A fresh, single-use anon client. Auth calls (sign-in, OTP verify) store
+   * the resulting session on the client instance, so per-request clients keep
+   * concurrent logins from sharing in-memory session state.
+   */
+  authClient(): SupabaseClient {
+    return createClient(
+      this.config.get('SUPABASE_URL', { infer: true }),
+      this.config.get('SUPABASE_ANON_KEY', { infer: true }),
+      { auth: { autoRefreshToken: false, persistSession: false } },
+    );
+  }
 }

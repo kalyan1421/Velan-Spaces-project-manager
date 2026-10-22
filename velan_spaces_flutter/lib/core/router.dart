@@ -28,7 +28,10 @@ import 'package:velan_spaces_flutter/presentation/widgets/shells/manager_shell.d
 final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
 final routerProvider = Provider<GoRouter>((ref) {
-  final authNotifier = ValueNotifier<UserRole>(UserRole.unknown);
+  // Seed with the current role: the session may already have been restored
+  // (main.dart) before the router exists. Starting at `unknown` meant a later
+  // sign-out (role -> unknown) was "no change" and never redirected to login.
+  final authNotifier = ValueNotifier<UserRole>(ref.read(currentUserRoleProvider));
 
   ref.listen<UserRole>(
     currentUserRoleProvider,

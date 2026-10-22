@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:velan_spaces_flutter/core/api/api_parse.dart';
 import 'package:velan_spaces_flutter/domain/entities/file_entity.dart';
 
 class FileModel extends FileEntity {
@@ -18,6 +19,25 @@ class FileModel extends FileEntity {
     super.approvalStatus,
     super.roomName,
   });
+
+  factory FileModel.fromApi(Map<String, dynamic> j) {
+    return FileModel(
+      id: apiString(j['id']),
+      name: apiString(j['name']),
+      storagePath: apiString(j['storagePath']),
+      category: apiString(j['category'], 'other'),
+      type: apiString(j['type'], 'unknown'),
+      size: apiInt(j['size']) ?? 0,
+      uploadedBy: apiString(j['uploadedByName'], apiString(j['uploadedBy'])),
+      uploadedAt: apiDate(j['uploadedAt']) ?? DateTime.now(),
+      version: apiInt(j['version']) ?? 1,
+      projectId: apiString(j['projectId']),
+      projectName: '',
+      title: apiString(j['title']),
+      approvalStatus: apiString(j['approvalStatus'], 'pending'),
+      roomName: apiString(j['roomName']),
+    );
+  }
 
   factory FileModel.fromSnapshot(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;

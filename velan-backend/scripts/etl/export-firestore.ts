@@ -10,7 +10,8 @@
  *   <outDir>/subcollections/<projectId>/<sub>.json  [{id,data}, ...]
  * Firestore Timestamps are serialized as ISO strings (mappers expect that).
  */
-import * as admin from 'firebase-admin';
+import { cert, initializeApp } from 'firebase-admin/app';
+import { Firestore, getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { readFileSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
@@ -45,7 +46,7 @@ const PROJECT_SUBS = [
 /** Recursively convert Firestore Timestamps to ISO strings for clean JSON. */
 function normalize(v: any): any {
   if (v == null) return v;
-  if (v instanceof admin.firestore.Timestamp) return v.toDate().toISOString();
+  if (v instanceof Timestamp) return v.toDate().toISOString();
   if (Array.isArray(v)) return v.map(normalize);
   if (typeof v === 'object') {
     const o: Record<string, any> = {};
@@ -62,7 +63,7 @@ function write(file: string, docs: Array<{ id: string; data: any }>) {
   console.log(`  ${file.padEnd(40)} ${docs.length}`);
 }
 
-async function dumpCollection(db: admin.firestore.Firestore, name: string) {
+async function dumpCollection(db: Firestore, name: string) {
   const snap = await db.collection(name).get();
   write(
     `${name}.json`,
@@ -73,10 +74,10 @@ async function dumpCollection(db: admin.firestore.Firestore, name: string) {
 
 async function main() {
   if (!saPath) throw new Error('Set FIREBASE_SERVICE_ACCOUNT_PATH');
-  admin.initializeApp({
-    credential: admin.credential.cert(JSON.parse(readFileSync(saPath, 'utf8'))),
+  initializeApp({
+    credential: cert(JSON.parse(readFileSync(saPath, 'utf8'))),
   });
-  const db = admin.firestore();
+  const db = getFirestore();
 
   console.log('-- top-level collections');
   let projectIds: string[] = [];

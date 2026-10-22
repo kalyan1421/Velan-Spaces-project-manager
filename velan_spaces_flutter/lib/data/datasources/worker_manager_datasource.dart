@@ -15,4 +15,7 @@ abstract class WorkerManagerDatasource {
   Future<void> deleteWorker(String workerId);
   Future<WorkerModel?> getWorkerByName(String name);
   Future<ManagerModel?> getManagerByName(String name);
+
+  /// One-time link (24h) the admin shares so the person can set a new password.
+  Future<String> createPasswordResetLink(String userId);
 }

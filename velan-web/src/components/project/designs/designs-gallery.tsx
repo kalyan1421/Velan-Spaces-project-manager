@@ -29,9 +29,32 @@ import {
 import type { Role } from "@/lib/api/types";
 import { displayFileName, mediaKindOfUrl } from "../media/media";
 import { MediaViewer, type ViewerItem } from "../media/media-viewer";
+import { ApprovalQueue } from "./approval-queue";
+import { designApi, ensureApprovalDesigns, type ApprovalDesign, type DesignApprovalStatus } from "./design-api";
 import { DesignCard } from "./design-card";
+import { DesignDecisionDialog, type DecisionRequest } from "./design-decision-dialog";
 import { DesignUploadDialog } from "./design-upload-dialog";
-import { designTitle, designTypeLabel, groupDesigns, splitDocuments } from "./design-utils";
+import {
+  approvalCounts,
+  awaitingClientDecision,
+  designTitle,
+  designTypeLabel,
+  groupDesigns,
+  portalGalleryDesigns,
+  withDecision,
+} from "./design-utils";
+
+type DecisionVars = {
+  design: ApprovalDesign;
+  status: DesignApprovalStatus;
+  comment?: string;
+};
+
+const DECISION_TOAST: Record<DesignApprovalStatus, string> = {
+  approved: "Design approved. We've let your project team know.",
+  changes_requested: "Change request sent. Your project team will share a revised design.",
+  pending: "Asked the client to review it again",
+};
 
 const PARAM = "design";
 
@@ -63,8 +86,10 @@ export function DesignsGridSkeleton() {
 /**
  * Designs tab: grouped grid, full-screen viewer (images + PDFs) and a
  * shareable `?design=<id>` link per design. Staff (head/manager) can upload,
- * toggle "needs client approval" and delete. The portal variant is read-only
- * and leaves quotation PDFs to the Documents section.
+ * toggle "needs client approval", ask for a fresh review and delete, and see
+ * each decision (who, when, the client's note). The portal variant lists the
+ * designs waiting for the client's approval with Approve / Request changes
+ * (optimistic), and leaves quotation PDFs to Files & documents.
  */
 export function DesignsGallery({
   projectId,
@@ -75,7 +100,7 @@ export function DesignsGallery({
   projectId: string;
   role: Role;
   variant: "staff" | "portal";
-  initialDesigns: Design[] | null;
+  initialDesigns: (Design | ApprovalDesign)[] | null;
 }) {
   const queryClient = useQueryClient();
   const pathname = usePathname();
@@ -85,22 +110,32 @@ export function DesignsGallery({
   const canUpload = staffView && caps.uploadDesign;
   const canEdit = staffView && caps.editDesign;
   const canDelete = staffView && caps.deleteDesign;
+  // Only the project's client decides; the API rejects anyone else.
+  const canDecide = variant === "portal" && role === "client";
   const key = contentKeys.designs(projectId);
 
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [toDelete, setToDelete] = useState<Design | null>(null);
+  const [toDelete, setToDelete] = useState<ApprovalDesign | null>(null);
+  const [decision, setDecision] = useState<DecisionRequest | null>(null);
+  // Rows from the older loader carry no approval record: refetch on mount.
+  const [initial] = useState(() => (initialDesigns ? ensureApprovalDesigns(initialDesigns) : undefined));
+  const initialComplete = initialDesigns?.every((d) => "approvalStatus" in d) ?? false;
 
   const query = useQuery({
     queryKey: key,
-    queryFn: ({ signal }) => contentApi.designs(projectId, { signal }),
-    initialData: initialDesigns ?? undefined,
+    queryFn: ({ signal }) => designApi.list(projectId, { signal }),
+    initialData: initial,
+    initialDataUpdatedAt: initialComplete ? undefined : 0,
     refetchInterval: SIGNED_URL_REFRESH_MS,
+    select: ensureApprovalDesigns,
   });
 
   const visible = useMemo(() => {
     const all = query.data ?? [];
-    return staffView ? all : splitDocuments(all).designs;
+    return staffView ? all : portalGalleryDesigns(all);
   }, [query.data, staffView]);
+  const awaiting = useMemo(() => (staffView ? [] : awaitingClientDecision(visible)), [visible, staffView]);
+  const counts = useMemo(() => approvalCounts(visible), [visible]);
   const groups = useMemo(() => groupDesigns(visible), [visible]);
   const ordered = useMemo(() => groups.flatMap((g) => g.items), [groups]);
   const viewerItems = useMemo<ViewerItem[]>(
@@ -130,24 +165,57 @@ export function DesignsGallery({
 
   const linkFor = (id: string) => `${window.location.origin}${pathname}?${PARAM}=${encodeURIComponent(id)}`;
   const copyLink = async (id: string) => {
-    if (await copyText(linkFor(id))) toast.success("Link copied", { description: "Anyone on this project can open it." });
+    if (await copyText(linkFor(id)))
+      toast.success("Link copied", {
+        description: "Anyone on this project can open it.",
+      });
     else toast.error("Couldn't copy the link. Copy it from the address bar instead.");
   };
 
+  const replaceInCache = (saved: ApprovalDesign) =>
+    queryClient.setQueryData<ApprovalDesign[]>(key, (list) => list?.map((d) => (d.id === saved.id ? saved : d)));
+
   const toggleApproval = useMutation({
-    mutationFn: (d: Design) => contentApi.updateDesign(projectId, d.id, { approvalRequired: !d.approvalRequired }),
+    mutationFn: (d: ApprovalDesign) =>
+      designApi.update(projectId, d.id, {
+        approvalRequired: !d.approvalRequired,
+      }),
     onSuccess: async (updated) => {
+      replaceInCache(updated);
       toast.success(updated.approvalRequired ? "Client approval requested" : "Approval no longer required");
       await queryClient.invalidateQueries({ queryKey: key });
     },
     onError: (e) => toast.error(isApiError(e) ? e.message : "Couldn't update the design."),
   });
 
+  // Client decision (approve / request changes) or staff re-request: optimistic.
+  const decide = useMutation({
+    mutationFn: ({ design, status, comment }: DecisionVars) =>
+      designApi.decide(projectId, design.id, comment ? { status, comment } : { status }),
+    onMutate: async (vars) => {
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<ApprovalDesign[]>(key);
+      queryClient.setQueryData<ApprovalDesign[]>(key, (list) =>
+        list?.map((d) => (d.id === vars.design.id ? withDecision(d, vars, new Date()) : d)),
+      );
+      return { previous };
+    },
+    onError: (e, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(key, context.previous);
+      toast.error(isApiError(e) ? e.message : "Couldn't save your decision. Please try again.");
+    },
+    onSuccess: (saved, vars) => {
+      replaceInCache(saved);
+      toast.success(DECISION_TOAST[vars.status]);
+    },
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: key }),
+  });
+
   const remove = useMutation({
-    mutationFn: (d: Design) => contentApi.deleteDesign(projectId, d.id),
+    mutationFn: (d: ApprovalDesign) => contentApi.deleteDesign(projectId, d.id),
     onSuccess: async (_r, d) => {
       setToDelete(null);
-      queryClient.setQueryData<Design[]>(key, (list) => list?.filter((x) => x.id !== d.id));
+      queryClient.setQueryData<ApprovalDesign[]>(key, (list) => list?.filter((x) => x.id !== d.id));
       toast.success("Design deleted");
       requestAnimationFrame(() => document.getElementById(`designs-heading-${projectId}`)?.focus());
       await queryClient.invalidateQueries({ queryKey: key });
@@ -159,7 +227,12 @@ export function DesignsGallery({
 
   let body: React.ReactNode;
   if (forbidden) {
-    body = variant === "portal" ? <ForbiddenState backHref="/portal" backLabel="Back to your projects" /> : <ForbiddenState />;
+    body =
+      variant === "portal" ? (
+        <ForbiddenState backHref="/portal" backLabel="Back to your projects" />
+      ) : (
+        <ForbiddenState />
+      );
   } else if (query.isPending) {
     body = <DesignsGridSkeleton />;
   } else if (query.isError && !query.data) {
@@ -212,11 +285,14 @@ export function DesignsGallery({
                 <li key={d.id}>
                   <DesignCard
                     design={d}
+                    viewer={staffView ? "staff" : "client"}
                     onOpen={() => setViewer(ordered.indexOf(d))}
                     onCopyLink={() => void copyLink(d.id)}
                     canEdit={canEdit}
                     canDelete={canDelete}
                     onToggleApproval={() => toggleApproval.mutate(d)}
+                    onRequestReview={() => decide.mutate({ design: d, status: "pending" })}
+                    onDecide={canDecide ? (mode) => setDecision({ design: d, mode }) : undefined}
                     onDelete={() => setToDelete(d)}
                   />
                 </li>
@@ -229,91 +305,135 @@ export function DesignsGallery({
   }
 
   return (
-    <section aria-labelledby={`designs-heading-${projectId}`} className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2
-          id={`designs-heading-${projectId}`}
-          tabIndex={-1}
-          className="font-heading text-lg font-semibold text-ink outline-none"
-        >
-          Designs
-          {ordered.length > 0 && <span className="ml-2 text-sm font-normal text-muted-foreground">{ordered.length}</span>}
-        </h2>
-        {canUpload && ordered.length > 0 && (
-          <Button onClick={() => setUploadOpen(true)}>
-            <Upload data-icon="inline-start" aria-hidden />
-            Upload designs
-          </Button>
-        )}
-      </div>
-
-      {missingLink && (
-        <Alert>
-          <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
-            <span>That design link is out of date — the design may have been removed.</span>
-            <Button variant="outline" size="sm" onClick={() => setViewer(null)}>
-              Dismiss
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {body}
-
-      <MediaViewer
-        items={viewerItems}
-        index={openIndex >= 0 ? openIndex : null}
-        onIndexChange={setViewer}
-        label="Design"
-        renderActions={(item) => (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-white hover:bg-white/15 hover:text-white"
-            aria-label="Copy link to this design"
-            title="Copy link"
-            onClick={() => void copyLink(item.key)}
-          >
-            <Link2 aria-hidden />
-          </Button>
-        )}
-      />
-
-      {canUpload && (
-        <DesignUploadDialog
+    <>
+      {canDecide && (
+        <ApprovalQueue
           projectId={projectId}
-          open={uploadOpen}
-          onOpenChange={setUploadOpen}
-          onSaved={async (count) => {
-            toast.success(`${count} ${count === 1 ? "design" : "designs"} added`);
-            await queryClient.invalidateQueries({ queryKey: key });
+          designs={awaiting}
+          onView={(d) => {
+            const index = ordered.findIndex((x) => x.id === d.id);
+            if (index >= 0) setViewer(index);
           }}
+          onDecide={(d, mode) => setDecision({ design: d, mode })}
         />
       )}
+      <section aria-labelledby={`designs-heading-${projectId}`} className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2
+            id={`designs-heading-${projectId}`}
+            tabIndex={-1}
+            className="font-heading text-lg font-semibold text-ink outline-none"
+          >
+            Designs
+            {ordered.length > 0 && (
+              <span className="ml-2 text-sm font-normal text-muted-foreground">{ordered.length}</span>
+            )}
+          </h2>
+          {canUpload && ordered.length > 0 && (
+            <Button onClick={() => setUploadOpen(true)}>
+              <Upload data-icon="inline-start" aria-hidden />
+              Upload designs
+            </Button>
+          )}
+        </div>
 
-      {canDelete && (
-        <AlertDialog open={toDelete !== null} onOpenChange={(open) => !open && !remove.isPending && setToDelete(null)}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete this design?</AlertDialogTitle>
-              <AlertDialogDescription>
-                “{toDelete ? designTitle(toDelete) : ""}” and its file will be removed for everyone, including the
-                client. This can&apos;t be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel disabled={remove.isPending}>Cancel</AlertDialogCancel>
-              <Button
-                variant="destructive"
-                disabled={remove.isPending}
-                onClick={() => toDelete && remove.mutate(toDelete)}
-              >
-                {remove.isPending ? "Deleting…" : "Delete design"}
+        {staffView && (counts.pending > 0 || counts.changesRequested > 0) && (
+          <p className="-mt-2 text-sm text-muted-foreground">
+            {[
+              counts.pending > 0 ? `${counts.pending} awaiting client approval` : null,
+              counts.changesRequested > 0 ? `${counts.changesRequested} with changes requested` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        )}
+
+        {missingLink && (
+          <Alert>
+            <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+              <span>That design link is out of date — the design may have been removed.</span>
+              <Button variant="outline" size="sm" onClick={() => setViewer(null)}>
+                Dismiss
               </Button>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      )}
-    </section>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {body}
+
+        <MediaViewer
+          items={viewerItems}
+          index={openIndex >= 0 ? openIndex : null}
+          onIndexChange={setViewer}
+          label="Design"
+          renderActions={(item) => (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-white hover:bg-white/15 hover:text-white"
+              aria-label="Copy link to this design"
+              title="Copy link"
+              onClick={() => void copyLink(item.key)}
+            >
+              <Link2 aria-hidden />
+            </Button>
+          )}
+        />
+
+        {canUpload && (
+          <DesignUploadDialog
+            projectId={projectId}
+            open={uploadOpen}
+            onOpenChange={setUploadOpen}
+            onSaved={async (count) => {
+              toast.success(`${count} ${count === 1 ? "design" : "designs"} added`);
+              await queryClient.invalidateQueries({ queryKey: key });
+            }}
+          />
+        )}
+
+        {canDecide && (
+          <DesignDecisionDialog
+            request={decision}
+            onOpenChange={(open) => !open && setDecision(null)}
+            onConfirm={(req, comment) => {
+              setDecision(null);
+              decide.mutate({
+                design: req.design,
+                status: req.mode,
+                comment: comment || undefined,
+              });
+            }}
+          />
+        )}
+
+        {canDelete && (
+          <AlertDialog
+            open={toDelete !== null}
+            onOpenChange={(open) => !open && !remove.isPending && setToDelete(null)}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete this design?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  “{toDelete ? designTitle(toDelete) : ""}” and its file will be removed for everyone, including the
+                  client. This can&apos;t be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={remove.isPending}>Cancel</AlertDialogCancel>
+                <Button
+                  variant="destructive"
+                  disabled={remove.isPending}
+                  onClick={() => toDelete && remove.mutate(toDelete)}
+                >
+                  {remove.isPending ? "Deleting…" : "Delete design"}
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
+      </section>
+    </>
   );
 }

@@ -62,13 +62,11 @@ jobs:
       - name: Build
         run: npm run build
 
-      # Production-dependency audit. Non-blocking for now: the only high findings
-      # (Oct 2026) come from the `shadcn` CLI (fast-glob -> micromatch -> braces),
-      # which is listed under dependencies but never reaches the standalone server.
-      # TODO: move `shadcn` to devDependencies, then drop continue-on-error.
+      # Production-dependency audit, blocking on high/critical. Dev tooling
+      # (shadcn CLI, Playwright, Vitest…) is excluded: it never reaches the
+      # standalone server. Clean as of 2026-10-22 (0 findings with --omit=dev).
       - name: Audit production dependencies (high+)
         run: npm audit --omit=dev --audit-level=high
-        continue-on-error: true
 
   docker:
     name: Docker image build (no push)

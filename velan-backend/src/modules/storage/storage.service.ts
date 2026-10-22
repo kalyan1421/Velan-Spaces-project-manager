@@ -1,8 +1,16 @@
-import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Env } from '../../config/env.validation';
 import { SupabaseService } from '../../supabase/supabase.service';
 import { ProjectAccessService } from '../../common/services/project-access.service';
 import { AuthenticatedUser } from '../../common/types/authenticated-user';
-import { evaluateStoragePolicy, StorageMode } from './storage-policy';
+import {
+  clientMayDownloadFileObject,
+  evaluateStoragePolicy,
+  FILE_ROW_BUCKETS,
+  StorageMode,
+} from './storage-policy';
+import { isRef, normalizeProjectRef, parseStorageRef, publicizeStorageUrl, REF_PREFIX } from './storage-refs';
 
 /**
  * Brokers Supabase Storage access. The client never holds storage keys:
@@ -15,10 +23,71 @@ import { evaluateStoragePolicy, StorageMode } from './storage-policy';
  */
 @Injectable()
 export class StorageService {
+  private readonly logger = new Logger(StorageService.name);
+
   constructor(
     private readonly supabase: SupabaseService,
     private readonly access: ProjectAccessService,
+    private readonly config: ConfigService<Env, true>,
   ) {}
+
+  /**
+   * Canonicalise file references sent for a project-scoped row (see
+   * storage-refs.ts). Throws 400 if any points outside the project's folder.
+   */
+  normalizeProjectRefs(
+    projectId: string,
+    values: string[] | undefined | null,
+    buckets: readonly string[],
+  ): string[] {
+    return (values ?? []).map((v) => this.normalizeProjectRef(projectId, v, buckets) as string);
+  }
+
+  normalizeProjectRef(
+    projectId: string,
+    value: string | undefined | null,
+    buckets: readonly string[],
+  ): string | null {
+    if (value === undefined || value === null || value === '') return null;
+    const res = normalizeProjectRef(value, {
+      supabaseUrls: this.storageBases(),
+      projectId,
+      buckets,
+    });
+    if (!res.ok) throw new BadRequestException(res.reason);
+    return res.value;
+  }
+
+  /** Addresses whose storage URLs we recognise as ours (public first). */
+  private storageBases(): string[] {
+    const internal = this.config.get('SUPABASE_URL', { infer: true });
+    const pub = this.config.get('SUPABASE_PUBLIC_URL', { infer: true });
+    return pub ? [pub, internal] : [internal];
+  }
+
+  /** A storage URL clients can reach (see SUPABASE_PUBLIC_URL). */
+  publicUrl(url: string): string {
+    return publicizeStorageUrl(
+      url,
+      this.config.get('SUPABASE_URL', { infer: true }),
+      this.config.get('SUPABASE_PUBLIC_URL', { infer: true }),
+    );
+  }
+
+  /** Best-effort delete of the objects behind `sb://` refs (other values ignored). */
+  async removeRefs(values: (string | null | undefined)[]): Promise<void> {
+    const byBucket = new Map<string, string[]>();
+    for (const v of values) {
+      if (!isRef(v)) continue;
+      const ref = parseStorageRef(v, '');
+      if (!ref) continue;
+      byBucket.set(ref.bucket, [...(byBucket.get(ref.bucket) ?? []), ref.path]);
+    }
+    for (const [bucket, paths] of byBucket) {
+      const { error } = await this.supabase.admin().storage.from(bucket).remove(paths);
+      if (error) this.logger.warn(`remove from ${bucket}: ${error.message}`);
+    }
+  }
 
   private async authorize(
     user: AuthenticatedUser,
@@ -39,6 +108,23 @@ export class StorageService {
     }
     if (decision.projectId) {
       await this.access.assertMember(user, decision.projectId);
+      if (mode === 'download' && user.role === 'client' && FILE_ROW_BUCKETS.includes(bucket)) {
+        await this.assertClientMaySeeFile(decision.projectId, bucket, path);
+      }
+    }
+  }
+
+  /** Clients only get files staff shared with them (files.client_visible). */
+  private async assertClientMaySeeFile(projectId: string, bucket: string, path: string) {
+    const { data, error } = await this.supabase
+      .admin()
+      .from('files')
+      .select('client_visible')
+      .eq('project_id', projectId)
+      .eq('storage_path', `${REF_PREFIX}${bucket}/${path}`);
+    if (error) throw new BadRequestException('Could not check file access');
+    if (!clientMayDownloadFileObject(data ?? [])) {
+      throw new ForbiddenException('This file has not been shared with you');
     }
   }
 
@@ -49,7 +135,7 @@ export class StorageService {
       .storage.from(bucket)
       .createSignedUploadUrl(path);
     if (error) throw new BadRequestException('Could not create upload URL');
-    return { bucket, path, signedUrl: data.signedUrl, token: data.token };
+    return { bucket, path, signedUrl: this.publicUrl(data.signedUrl), token: data.token };
   }
 
   async signDownload(
@@ -64,6 +150,6 @@ export class StorageService {
       .storage.from(bucket)
       .createSignedUrl(path, expiresIn);
     if (error) throw new BadRequestException('Could not create download URL');
-    return { bucket, path, signedUrl: data.signedUrl, expiresIn };
+    return { bucket, path, signedUrl: this.publicUrl(data.signedUrl), expiresIn };
   }
 }

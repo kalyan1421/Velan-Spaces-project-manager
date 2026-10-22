@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:velan_spaces_flutter/core/utils/account_validators.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:velan_spaces_flutter/core/theme.dart';
@@ -30,6 +31,7 @@ class _CreateWorkerBottomSheetState
     extends ConsumerState<CreateWorkerBottomSheet> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _usernameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _tradeController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -39,6 +41,7 @@ class _CreateWorkerBottomSheetState
   @override
   void dispose() {
     _nameController.dispose();
+    _usernameController.dispose();
     _phoneController.dispose();
     _tradeController.dispose();
     _passwordController.dispose();
@@ -54,7 +57,8 @@ class _CreateWorkerBottomSheetState
         .read(workerManagerControllerProvider.notifier)
         .addWorker(
           name: _nameController.text.trim(),
-          password: _passwordController.text.trim(),
+          username: _usernameController.text.trim().toLowerCase(),
+          password: _passwordController.text,
           phone: _phoneController.text.trim().isEmpty
               ? null
               : _phoneController.text.trim(),
@@ -158,21 +162,31 @@ class _CreateWorkerBottomSheetState
               ),
               const SizedBox(height: 16),
 
-              // Password Field
+              // Username (workers sign in with it; they have no email)
+              TextFormField(
+                controller: _usernameController,
+                autocorrect: false,
+                decoration: const InputDecoration(
+                  labelText: 'Username (they sign in with this)',
+                  hintText: 'e.g. ravi.k',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.alternate_email),
+                ),
+                validator: AccountValidators.username,
+              ),
+              const SizedBox(height: 16),
+
+              // Initial password
               TextFormField(
                 controller: _passwordController,
                 decoration: const InputDecoration(
-                  labelText: 'Password',
+                  labelText: 'Initial password',
+                  helperText: 'Share it with the worker; reset links can replace it later',
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.lock),
                 ),
                 obscureText: true,
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter worker password';
-                  }
-                  return null;
-                },
+                validator: AccountValidators.newPassword,
               ),
               const SizedBox(height: 16),
 

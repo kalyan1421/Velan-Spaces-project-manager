@@ -228,29 +228,47 @@ export function sanitizeFileName(fileName: string, contentType: string): string 
   return `${base}.${ext}`;
 }
 
-/** `<SUPABASE_URL>/storage/v1/object/public/portfolio/` */
-export function portfolioPublicPrefix(supabaseUrl: string): string {
-  let base = supabaseUrl;
+/**
+ * A Supabase base URL the way supabase-js normalises it (lowercase host, no
+ * default port), without a trailing slash, so URLs it builds compare equal.
+ */
+export function normalizeSupabaseBase(supabaseUrl: string): string {
+  let base = supabaseUrl.trim();
   try {
-    const u = new URL(supabaseUrl);
+    const u = new URL(base);
     base = `${u.origin}${u.pathname}`; // lowercases the host, drops default ports
   } catch {
     // keep the raw value; nothing will match it anyway
   }
-  return `${base.replace(/\/+$/, '')}/storage/v1/object/public/${PORTFOLIO_BUCKET}/`;
+  return base.replace(/\/+$/, '');
+}
+
+/** `<SUPABASE_URL>/storage/v1/object/public/portfolio/` */
+export function portfolioPublicPrefix(supabaseUrl: string): string {
+  return `${normalizeSupabaseBase(supabaseUrl)}/storage/v1/object/public/${PORTFOLIO_BUCKET}/`;
 }
 
 /**
  * Only plain public URLs of OUR portfolio bucket may be stored on an item —
  * no other hosts (hot-linking / tracking pixels), buckets, signed URLs,
  * query strings or path tricks.
+ *
+ * `supabaseUrls`: every address our Storage is reached at — SUPABASE_URL and,
+ * when set, SUPABASE_PUBLIC_URL (self-hosted Supabase behind an internal
+ * hostname). URLs under either prefix are accepted.
  */
-export function isAllowedPortfolioUrl(value: unknown, supabaseUrl: string): boolean {
+export function isAllowedPortfolioUrl(
+  value: unknown,
+  supabaseUrls: string | readonly (string | null | undefined)[],
+): boolean {
   if (typeof value !== 'string' || value.length === 0) return false;
   if (value.length > MAX_PORTFOLIO_URL_LENGTH) return false;
 
-  const prefix = portfolioPublicPrefix(supabaseUrl);
-  if (!value.startsWith(prefix)) return false;
+  const bases = (typeof supabaseUrls === 'string' ? [supabaseUrls] : supabaseUrls).filter(
+    (b): b is string => typeof b === 'string' && b.trim() !== '',
+  );
+  const prefix = bases.map(portfolioPublicPrefix).find((p) => value.startsWith(p));
+  if (!prefix) return false;
   if (value.includes('?') || value.includes('#')) return false;
 
   let parsed: URL;
@@ -396,13 +414,16 @@ export function buildPortfolioPatch(input: PortfolioWriteInput): Record<string, 
 }
 
 /** Every image URL on a write (cover + gallery) that fails the bucket check. */
-export function invalidImageUrls(input: PortfolioWriteInput, supabaseUrl: string): string[] {
+export function invalidImageUrls(
+  input: PortfolioWriteInput,
+  supabaseUrls: string | readonly (string | null | undefined)[],
+): string[] {
   const urls: unknown[] = [];
   if (input.coverImageUrl !== undefined && input.coverImageUrl !== null) {
     urls.push(input.coverImageUrl);
   }
   if (input.imageUrls) urls.push(...input.imageUrls);
   return urls
-    .filter((u) => !isAllowedPortfolioUrl(u, supabaseUrl))
+    .filter((u) => !isAllowedPortfolioUrl(u, supabaseUrls))
     .map((u) => String(u));
 }

@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:velan_spaces_flutter/domain/entities/manager_entity.dart';
 import 'package:velan_spaces_flutter/domain/entities/worker_entity.dart';
 import 'package:velan_spaces_flutter/domain/entities/project_entity.dart';
@@ -33,8 +32,20 @@ class WorkerManagerController extends StateNotifier<AsyncValue<void>> {
   WorkerManagerDatasource get _datasource =>
       _ref.read(workerManagerDatasourceProvider);
 
+  /// One-time password reset link (24h) for a manager, worker or client.
+  /// Returns null (and sets the error state) on failure.
+  Future<String?> createResetLink(String userId) async {
+    try {
+      return await _datasource.createPasswordResetLink(userId);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+      return null;
+    }
+  }
+
   Future<bool> addWorker({
     required String name,
+    required String username,
     required String password,
     String? phone,
     String? trade,
@@ -52,6 +63,7 @@ class WorkerManagerController extends StateNotifier<AsyncValue<void>> {
         trade: trade ?? '',
         password: password,
         assignedProjects: assignedProjects,
+        username: username,
       );
 
       // 1. Create Create Worker
@@ -59,12 +71,10 @@ class WorkerManagerController extends StateNotifier<AsyncValue<void>> {
 
       // 2. If project ID is provided, update the project's workerIds
       if (assignToProjectId != null) {
-        final projectDs = _ref.read(firestoreProjectDatasourceProvider);
-        // We need to use FieldValue.arrayUnion, but ProjectDatasource.updateProject takes generic map.
-        // We assume the datasource implementation handles Map<String, dynamic> passed to update().
-        // Firestore allows FieldValue in update().
+        final projectDs = _ref.read(projectDatasourceProvider);
+        final project = await projectDs.getProjectById(assignToProjectId);
         await projectDs.updateProject(assignToProjectId, {
-          'workerIds': FieldValue.arrayUnion([workerId]),
+          'workerIds': {...project.workerIds, workerId}.toList(),
         });
       }
 
@@ -104,10 +114,10 @@ class WorkerManagerController extends StateNotifier<AsyncValue<void>> {
     }
   }
 
+  /// Passwords are not editable any more; use [createResetLink].
   Future<bool> updateManager({
     required String managerId,
     required String name,
-    required String password,
     required bool isSuspended,
     String phone = '',
     String email = '',
@@ -118,7 +128,6 @@ class WorkerManagerController extends StateNotifier<AsyncValue<void>> {
         'name': name,
         'phone': phone,
         'email': email,
-        'password': password,
         'isSuspended': isSuspended,
       });
       state = const AsyncValue.data(null);
@@ -146,7 +155,7 @@ class WorkerManagerController extends StateNotifier<AsyncValue<void>> {
   Future<bool> updateWorker({
     required String workerId,
     required String name,
-    required String password,
+    String? username,
     String phone = '',
     String trade = '',
   }) async {
@@ -156,7 +165,7 @@ class WorkerManagerController extends StateNotifier<AsyncValue<void>> {
         'name': name,
         'phone': phone,
         'trade': trade,
-        'password': password,
+        if (username != null && username.trim().isNotEmpty) 'username': username.trim().toLowerCase(),
       });
       state = const AsyncValue.data(null);
       return true;

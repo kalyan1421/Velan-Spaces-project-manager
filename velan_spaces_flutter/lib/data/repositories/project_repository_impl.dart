@@ -40,6 +40,13 @@ class ProjectRepositoryImpl implements ProjectRepository {
   }
 
   @override
+  Stream<Either<Failure, ProjectEntity>> watchProject(String projectId) {
+    return datasource
+        .watchProject(projectId)
+        .map((project) => right<Failure, ProjectEntity>(project));
+  }
+
+  @override
   Stream<Either<Failure, List<ProjectEntity>>> watchManagerProjects(String managerId) {
     try {
       return datasource.watchManagerProjects(managerId).map(

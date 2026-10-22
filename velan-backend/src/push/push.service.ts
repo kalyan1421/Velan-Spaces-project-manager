@@ -1,7 +1,8 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { readFileSync } from 'fs';
-import * as admin from 'firebase-admin';
+import { App, cert, initializeApp } from 'firebase-admin/app';
+import { getMessaging } from 'firebase-admin/messaging';
 import { Env } from '../config/env.validation';
 
 /**
@@ -12,7 +13,7 @@ import { Env } from '../config/env.validation';
 @Injectable()
 export class PushService implements OnModuleInit {
   private readonly logger = new Logger(PushService.name);
-  private app?: admin.app.App;
+  private app?: App;
 
   constructor(private readonly config: ConfigService<Env, true>) {}
 
@@ -31,10 +32,7 @@ export class PushService implements OnModuleInit {
       const serviceAccount = JSON.parse(
         json ? PushService.decodeInline(json) : readFileSync(path as string, 'utf8'),
       );
-      this.app = admin.initializeApp(
-        { credential: admin.credential.cert(serviceAccount) },
-        'velan',
-      );
+      this.app = initializeApp({ credential: cert(serviceAccount) }, 'velan');
       this.logger.log('FCM initialized');
     } catch (e) {
       this.logger.error(`FCM init failed: ${(e as Error).message}`);
@@ -60,7 +58,7 @@ export class PushService implements OnModuleInit {
   ): Promise<{ sent: number; failed: number }> {
     if (!this.app || tokens.length === 0) return { sent: 0, failed: 0 };
     try {
-      const res = await admin.messaging(this.app).sendEachForMulticast({
+      const res = await getMessaging(this.app).sendEachForMulticast({
         tokens,
         notification,
         data,

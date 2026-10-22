@@ -36,6 +36,17 @@ export class ProjectsController {
     return this.projects.findOne(user, id);
   }
 
+  @Get(':id/members')
+  @ApiOperation({
+    summary: 'People on a project with names (any member; contact details for head/manager only)',
+  })
+  members(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.projects.members(user, id);
+  }
+
   @Post()
   @Roles('head', 'manager')
   @ApiOperation({ summary: 'Create a project (head/manager)' })

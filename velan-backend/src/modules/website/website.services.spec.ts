@@ -587,6 +587,8 @@ describe('EnquiriesService', () => {
       title: 'New website enquiry',
       body: 'Asha Raman · Residential',
       type: 'lead',
+      leadId: expect.any(String),
+      entityId: expect.any(String),
     });
   });
 

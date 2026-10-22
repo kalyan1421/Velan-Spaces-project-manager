@@ -16,6 +16,7 @@ abstract class ProjectRepository {
   Stream<Either<Failure, List<ProjectEntity>>> watchManagerProjects(String managerId);
   Future<Either<Failure, String>> createProject(ProjectEntity project);
   Future<Either<Failure, ProjectEntity>> getProjectById(String projectId);
+  Stream<Either<Failure, ProjectEntity>> watchProject(String projectId);
   Future<Either<Failure, void>> updateProject(String projectId, Map<String, dynamic> data);
   Future<Either<Failure, void>> deleteProject(String projectId);
 

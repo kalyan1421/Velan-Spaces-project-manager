@@ -1,4 +1,5 @@
 import {
+  clientMayDownloadFileObject,
   evaluateStoragePolicy,
   StorageRequest,
   validateObjectPath,
@@ -149,5 +150,20 @@ describe('evaluateStoragePolicy — quotations / avatars / unknown', () => {
 
   it('rejects unknown buckets', () => {
     expect(evaluateStoragePolicy(base({ bucket: 'secrets' })).allowed).toBe(false);
+  });
+});
+
+describe('clientMayDownloadFileObject', () => {
+  it('allows objects no file row points at (chat attachments, proofs)', () => {
+    expect(clientMayDownloadFileObject([])).toBe(true);
+  });
+
+  it('allows files shared with the client', () => {
+    expect(clientMayDownloadFileObject([{ client_visible: true }])).toBe(true);
+    expect(clientMayDownloadFileObject([{ client_visible: false }, { client_visible: true }])).toBe(true);
+  });
+
+  it('refuses objects only hidden file rows point at', () => {
+    expect(clientMayDownloadFileObject([{ client_visible: false }])).toBe(false);
   });
 });

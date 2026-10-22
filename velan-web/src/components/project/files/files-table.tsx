@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, ExternalLink, FolderOpen, RotateCcw, Trash2, TriangleAlert, Upload } from "lucide-react";
+import { Download, Eye, EyeOff, ExternalLink, FolderOpen, RotateCcw, Trash2, TriangleAlert, Upload } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ForbiddenState, StateMessage } from "@/components/app-shell/states";
@@ -31,6 +31,7 @@ import { formatDate, formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { BatchUploadDialog } from "../media/batch-upload-dialog";
 import { FILE_ACCEPT, FILE_EXTENSIONS, MAX_FILE_BYTES, downloadUrl, fileTypeLabel, formatBytes, validateFiles } from "../media/media";
+import { ensureSharedFiles, fileApi, type SharedFile } from "./file-api";
 import { FileTypeIcon } from "./file-icon";
 import { buildCreateFileBody, fileDisplayName, fileNameWithExtension, sortFilesNewestFirst } from "./file-utils";
 
@@ -50,7 +51,10 @@ export function FilesTableSkeleton() {
   );
 }
 
-/** Files tab: table with open/download; head/manager upload and delete. */
+/**
+ * Files tab: table with open/download; head/manager upload, delete and
+ * share a file with the client (files are staff-only until shared).
+ */
 export function FilesTable({
   projectId,
   role,
@@ -58,27 +62,60 @@ export function FilesTable({
 }: {
   projectId: string;
   role: Role;
-  initialFiles: ProjectFile[] | null;
+  initialFiles: (ProjectFile | SharedFile)[] | null;
 }) {
   const queryClient = useQueryClient();
   const caps = contentCapabilities(role);
+  // Same roles as upload/delete: head and managers (the API enforces it).
+  const canShare = caps.uploadFile;
   const key = contentKeys.files(projectId);
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [toDelete, setToDelete] = useState<ProjectFile | null>(null);
+  const [toDelete, setToDelete] = useState<SharedFile | null>(null);
+  // Rows from the older loader don't say whether they're shared: refetch on mount.
+  const [initial] = useState(() => (initialFiles ? ensureSharedFiles(initialFiles) : undefined));
+  const initialComplete = initialFiles?.every((f) => "clientVisible" in f) ?? false;
 
   const query = useQuery({
     queryKey: key,
-    queryFn: ({ signal }) => contentApi.files(projectId, { signal }),
-    initialData: initialFiles ?? undefined,
+    queryFn: ({ signal }) => fileApi.list(projectId, { signal }),
+    initialData: initial,
+    initialDataUpdatedAt: initialComplete ? undefined : 0,
     refetchInterval: SIGNED_URL_REFRESH_MS,
+    select: ensureSharedFiles,
   });
   const files = useMemo(() => sortFilesNewestFirst(query.data ?? []), [query.data]);
+  const sharedCount = files.filter((f) => f.clientVisible).length;
+
+  const setShared = (id: string, clientVisible: boolean) =>
+    queryClient.setQueryData<SharedFile[]>(key, (list) => list?.map((f) => (f.id === id ? { ...f, clientVisible } : f)));
+
+  const share = useMutation({
+    mutationFn: ({ file, visible }: { file: SharedFile; visible: boolean }) =>
+      fileApi.setClientVisible(projectId, file.id, visible),
+    onMutate: async ({ file, visible }) => {
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<SharedFile[]>(key);
+      setShared(file.id, visible);
+      return { previous };
+    },
+    onError: (e, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(key, context.previous);
+      toast.error(isApiError(e) ? e.message : "Couldn't change who can see the file.");
+    },
+    onSuccess: (_saved, { file, visible }) => {
+      toast.success(visible ? "Shared with the client" : "Hidden from the client", {
+        description: fileDisplayName(file),
+        action: { label: "Undo", onClick: () => share.mutate({ file, visible: !visible }) },
+      });
+    },
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: key }),
+  });
 
   const remove = useMutation({
-    mutationFn: (f: ProjectFile) => contentApi.deleteFile(projectId, f.id),
+    mutationFn: (f: SharedFile) => contentApi.deleteFile(projectId, f.id),
     onSuccess: async (_r, f) => {
       setToDelete(null);
-      queryClient.setQueryData<ProjectFile[]>(key, (list) => list?.filter((x) => x.id !== f.id));
+      queryClient.setQueryData<SharedFile[]>(key, (list) => list?.filter((x) => x.id !== f.id));
       toast.success("File deleted");
       requestAnimationFrame(() => document.getElementById(`files-heading-${projectId}`)?.focus());
       await queryClient.invalidateQueries({ queryKey: key });
@@ -170,6 +207,12 @@ export function FilesTable({
                           <span className="sm:hidden">· {formatDate(f.uploadedAt)}</span>
                           {f.version > 1 && <Badge variant="outline">v{f.version}</Badge>}
                           {f.roomName && <span>{f.roomName}</span>}
+                          {f.clientVisible && (
+                            <Badge variant="secondary" className="bg-success/10 text-success">
+                              <Eye data-icon="inline-start" aria-hidden />
+                              Client can see
+                            </Badge>
+                          )}
                         </p>
                       </div>
                     </div>
@@ -209,6 +252,19 @@ export function FilesTable({
                           </a>
                         </>
                       )}
+                      {canShare && f.clientVisible !== null && (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-pressed={f.clientVisible}
+                          aria-label={f.clientVisible ? `Stop sharing ${name} with the client` : `Share ${name} with the client`}
+                          title={f.clientVisible ? "Stop sharing with the client" : "Share with the client"}
+                          className={cn(f.clientVisible && "text-success hover:text-success")}
+                          onClick={() => share.mutate({ file: f, visible: !f.clientVisible })}
+                        >
+                          {f.clientVisible ? <Eye aria-hidden /> : <EyeOff aria-hidden />}
+                        </Button>
+                      )}
                       {caps.deleteFile && (
                         <Button
                           variant="ghost"
@@ -240,6 +296,14 @@ export function FilesTable({
         </h2>
         {caps.uploadFile && files.length > 0 && uploadButton}
       </div>
+      {canShare && files.length > 0 && (
+        <p className="-mt-2 text-sm text-muted-foreground">
+          Files stay internal until you share them.{" "}
+          {sharedCount > 0
+            ? `${sharedCount} of ${files.length} ${files.length === 1 ? "is" : "are"} visible to the client.`
+            : "None are visible to the client yet."}
+        </p>
+      )}
       {body}
 
       {caps.uploadFile && (
@@ -247,7 +311,7 @@ export function FilesTable({
           open={uploadOpen}
           onOpenChange={setUploadOpen}
           title="Upload files"
-          description="Contracts, bills, specs, spreadsheets, photos or videos. Each file is added separately."
+          description="Contracts, bills, specs, spreadsheets, photos or videos. Each file is added separately and stays internal until you share it with the client."
           target={{ projectId, bucket: "project-files", area: "files" }}
           accept={FILE_ACCEPT}
           plan={(_queued, picked) =>

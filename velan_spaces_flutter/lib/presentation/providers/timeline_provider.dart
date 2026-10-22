@@ -2,10 +2,12 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:velan_spaces_flutter/data/repositories/timeline_repository.dart';
 import 'package:velan_spaces_flutter/domain/entities/timeline_entity.dart';
 
+import 'package:velan_spaces_flutter/core/utils/uuid.dart';
+
 part 'timeline_provider.g.dart';
 
-// Helper to generate IDs without uuid package
-String _generateId() => DateTime.now().millisecondsSinceEpoch.toString();
+// Phase/task ids must be UUIDs: the server keeps them stable across saves.
+String _generateId() => uuidV4();
 
 @riverpod
 class Timeline extends _$Timeline {

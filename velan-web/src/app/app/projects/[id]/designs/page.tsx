@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { ForbiddenState } from "@/components/app-shell/states";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DesignsGallery, DesignsGridSkeleton } from "@/components/project/designs/designs-gallery";
-import { loadDesigns } from "@/components/project/media/load-content";
+import { loadApprovalDesigns } from "@/components/project/designs/load-designs";
 import { getSession } from "@/lib/auth/session";
 import { loadProject } from "@/lib/data/load-project";
 
@@ -32,7 +32,8 @@ async function DesignsContent({ params }: { params: PageProps<"/app/projects/[id
   if (result.kind === "forbidden") return null;
   if (result.kind === "missing" || !user) notFound();
 
-  const designs = await loadDesigns(result.project.id);
+  // Keeps each design's approval record (status, client's note, who/when).
+  const designs = await loadApprovalDesigns(result.project.id);
   if (designs.kind === "forbidden") return <ForbiddenState />;
 
   // `?design=<id>` (shareable link) is read on the client by the gallery.

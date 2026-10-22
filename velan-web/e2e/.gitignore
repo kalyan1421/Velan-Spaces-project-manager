@@ -1,0 +1,5 @@
+# Saved sessions, API tokens and fixture ids (never commit)
+.auth/
+# Playwright artefacts
+.output/
+.report/

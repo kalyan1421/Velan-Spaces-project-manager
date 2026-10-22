@@ -14,6 +14,8 @@ abstract class ProjectDatasource {
   Stream<List<ProjectModel>> watchManagerProjects(String managerId);
   Future<String> createProject(ProjectModel project);
   Future<ProjectModel> getProjectById(String projectId);
+  /// One project, kept current (spend, completion, members change server-side).
+  Stream<ProjectModel> watchProject(String projectId);
   Future<void> updateProject(String projectId, Map<String, dynamic> data);
   Future<void> deleteProject(String projectId);
 

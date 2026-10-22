@@ -1,18 +1,30 @@
 import { describe, expect, it } from "vitest";
 import { normalizeDesign } from "@/lib/api/project-content";
+import { ensureApprovalDesigns, normalizeApprovalDesign } from "./design-api";
 import {
+  approvalCounts,
   approvalStateOf,
+  approvalSummary,
+  awaitingClientDecision,
+  clientCanDecide,
   designGroupOf,
   designTitle,
   designTitlesFor,
   groupDesigns,
   numberedTitles,
+  portalGalleryDesigns,
   splitDocuments,
   titleFromFileName,
+  validateDecisionComment,
+  withDecision,
 } from "./design-utils";
 
 const design = (over: Record<string, unknown>) =>
   normalizeDesign({ id: "d", projectId: "p", createdAt: "2026-10-14T10:00:00Z", ...over });
+
+/** A row as the API returns it now (R-E4), through the approval-aware normalizer. */
+const approval = (over: Record<string, unknown>) =>
+  normalizeApprovalDesign({ id: "d", projectId: "p", createdAt: "2026-10-14T10:00:00Z", ...over });
 
 describe("designGroupOf", () => {
   it("understands current and legacy type values", () => {
@@ -85,10 +97,178 @@ describe("designTitle", () => {
 });
 
 describe("approvalStateOf", () => {
-  it("maps the two approval flags", () => {
+  it("maps the legacy approval flags (rows without a status)", () => {
     expect(approvalStateOf(design({}))).toBe("not-required");
     expect(approvalStateOf(design({ approvalRequired: true }))).toBe("pending");
     expect(approvalStateOf(design({ approvalRequired: true, approvalApproved: true }))).toBe("approved");
     expect(approvalStateOf(design({ approvalApproved: true }))).toBe("approved");
+  });
+
+  it("maps the approval status", () => {
+    expect(approvalStateOf(approval({ approvalRequired: true, approvalStatus: "pending" }))).toBe("pending");
+    expect(approvalStateOf(approval({ approvalRequired: true, approvalStatus: "approved" }))).toBe("approved");
+    expect(approvalStateOf(approval({ approvalRequired: true, approvalStatus: "changes_requested" }))).toBe(
+      "changes-requested",
+    );
+  });
+
+  it("keeps showing an approval after approval is no longer required, but not a stale change request", () => {
+    expect(approvalStateOf(approval({ approvalRequired: false, approvalStatus: "approved" }))).toBe("approved");
+    expect(approvalStateOf(approval({ approvalRequired: false, approvalStatus: "changes_requested" }))).toBe(
+      "not-required",
+    );
+    expect(approvalStateOf(approval({ approvalRequired: false, approvalStatus: "pending" }))).toBe("not-required");
+  });
+
+  it("lets the client decide only while a decision is open", () => {
+    expect(clientCanDecide(approval({ approvalRequired: true }))).toBe(true);
+    expect(clientCanDecide(approval({ approvalRequired: true, approvalStatus: "changes_requested" }))).toBe(true);
+    expect(clientCanDecide(approval({ approvalRequired: true, approvalStatus: "approved" }))).toBe(false);
+    expect(clientCanDecide(approval({ approvalRequired: false }))).toBe(false);
+  });
+});
+
+describe("normalizeApprovalDesign", () => {
+  it("reads the approval record", () => {
+    const d = approval({
+      approvalRequired: true,
+      approvalStatus: "changes_requested",
+      approvalApproved: false,
+      approvalComment: "Wider door",
+      approvalDecidedAt: "2026-10-20T08:00:00Z",
+      approvalDecidedBy: "u1",
+      approvalDecidedByName: "Asha",
+    });
+    expect(d).toMatchObject({
+      approvalStatus: "changes_requested",
+      approvalApproved: false,
+      approvalComment: "Wider door",
+      approvalDecidedAt: "2026-10-20T08:00:00Z",
+      approvalDecidedBy: "u1",
+      approvalDecidedByName: "Asha",
+    });
+  });
+
+  it("falls back to the boolean when the API has no status, and ignores unknown statuses", () => {
+    expect(approval({ approvalApproved: true }).approvalStatus).toBe("approved");
+    expect(approval({}).approvalStatus).toBe("pending");
+    expect(approval({ approvalStatus: "rejected", approvalApproved: true }).approvalStatus).toBe("approved");
+    expect(approval({ approvalComment: "  " }).approvalComment).toBeNull();
+  });
+
+  it("the status wins over a stale boolean", () => {
+    const d = approval({ approvalStatus: "changes_requested", approvalApproved: true });
+    expect(d.approvalApproved).toBe(false);
+  });
+
+  it("upgrades rows from the older normalizer", () => {
+    const [d] = ensureApprovalDesigns([design({ approvalRequired: true, approvalApproved: true })]);
+    expect(d.approvalStatus).toBe("approved");
+    const already = approval({ approvalStatus: "changes_requested", approvalRequired: true });
+    expect(ensureApprovalDesigns([already])[0]).toBe(already);
+  });
+});
+
+describe("approval lists", () => {
+  const list = [
+    approval({ id: "new", approvalRequired: true, createdAt: "2026-10-20T00:00:00Z" }),
+    approval({ id: "old", approvalRequired: true, createdAt: "2026-10-01T00:00:00Z" }),
+    approval({ id: "chg", approvalRequired: true, approvalStatus: "changes_requested" }),
+    approval({ id: "ok", approvalRequired: true, approvalStatus: "approved" }),
+    approval({ id: "legacy-ok", approvalApproved: true }),
+    approval({ id: "free" }),
+  ];
+
+  it("lists designs waiting for the client's first decision, oldest first", () => {
+    expect(awaitingClientDecision(list).map((d) => d.id)).toEqual(["old", "new"]);
+  });
+
+  it("counts states for the staff summary (only approvals that were asked for)", () => {
+    expect(approvalCounts(list)).toEqual({ pending: 2, changesRequested: 1, approved: 1 });
+  });
+
+  it("portal gallery hides quotations unless the client must approve one", () => {
+    const shown = portalGalleryDesigns([
+      approval({ id: "q", type: "Quotation" }),
+      approval({ id: "qa", type: "Quotation", approvalRequired: true }),
+      approval({ id: "p", type: "2D Plan" }),
+    ]);
+    expect(shown.map((d) => d.id)).toEqual(["qa", "p"]);
+  });
+});
+
+describe("approvalSummary", () => {
+  const decided = (status: string) =>
+    approval({
+      approvalRequired: true,
+      approvalStatus: status,
+      approvalDecidedAt: "2026-10-20T08:00:00Z",
+      approvalDecidedByName: "Asha Raman",
+    });
+
+  it("names the client for staff and says 'You' to the client", () => {
+    expect(approvalSummary(decided("approved"), "staff")).toBe("Approved by Asha Raman · 20 Oct 2026");
+    expect(approvalSummary(decided("approved"), "client")).toBe("You approved this · 20 Oct 2026");
+    expect(approvalSummary(decided("changes_requested"), "staff")).toBe("Changes requested by Asha Raman · 20 Oct 2026");
+    expect(approvalSummary(decided("changes_requested"), "client")).toBe("You asked for changes · 20 Oct 2026");
+  });
+
+  it("describes waiting designs and stays quiet otherwise", () => {
+    expect(approvalSummary(approval({ approvalRequired: true }), "staff")).toBe("Waiting for the client");
+    expect(approvalSummary(approval({ approvalRequired: true }), "client")).toBe("Waiting for your approval");
+    expect(approvalSummary(approval({}), "staff")).toBeNull();
+    // Approved under the old boolean-only model: no record to show.
+    expect(approvalSummary(approval({ approvalApproved: true }), "staff")).toBeNull();
+    expect(approvalSummary(approval({ approvalStatus: "changes_requested", approvalRequired: true }), "staff")).toBe(
+      "Changes requested by the client",
+    );
+  });
+});
+
+describe("validateDecisionComment", () => {
+  it("requires a comment to request changes, not to approve", () => {
+    expect(validateDecisionComment("changes_requested", "   ")).toMatch(/what you'd like changed/);
+    expect(validateDecisionComment("changes_requested", "Wider")).toBeNull();
+    expect(validateDecisionComment("approved", "")).toBeNull();
+  });
+
+  it("caps comments at the API limit", () => {
+    expect(validateDecisionComment("approved", "x".repeat(2001))).toMatch(/2000/);
+    expect(validateDecisionComment("approved", ` ${"x".repeat(2000)} `)).toBeNull();
+  });
+});
+
+describe("withDecision (optimistic update)", () => {
+  const now = new Date("2026-10-22T09:00:00Z");
+  const base = approval({ approvalRequired: true });
+
+  it("applies a client decision", () => {
+    expect(withDecision(base, { status: "approved" }, now)).toMatchObject({
+      approvalStatus: "approved",
+      approvalApproved: true,
+      approvalComment: null,
+      approvalDecidedAt: "2026-10-22T09:00:00.000Z",
+    });
+    const changes = withDecision(base, { status: "changes_requested", comment: "  Wider  " }, now);
+    expect(changes).toMatchObject({ approvalStatus: "changes_requested", approvalApproved: false, approvalComment: "Wider" });
+    expect(approvalStateOf(changes)).toBe("changes-requested");
+  });
+
+  it("a staff re-request starts a fresh round", () => {
+    const decided = withDecision(base, { status: "changes_requested", comment: "Wider" }, now);
+    const again = withDecision({ ...decided, approvalDecidedByName: "Asha" }, { status: "pending" }, now);
+    expect(again).toMatchObject({
+      approvalRequired: true,
+      approvalStatus: "pending",
+      approvalComment: null,
+      approvalDecidedAt: null,
+      approvalDecidedByName: null,
+    });
+    expect(approvalStateOf(again)).toBe("pending");
+  });
+
+  it("does not mutate the cached design", () => {
+    withDecision(base, { status: "approved" }, now);
+    expect(base.approvalStatus).toBe("pending");
   });
 });

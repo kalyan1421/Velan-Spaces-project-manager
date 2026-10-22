@@ -9,12 +9,14 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../supabase/supabase.service';
 import { Env } from '../../config/env.validation';
+import { publicizeStorageUrl } from '../storage/storage-refs';
 import { CreatePortfolioDto, SignPortfolioUploadDto, UpdatePortfolioDto } from './dto';
 import {
   buildPortfolioPatch,
   invalidImageUrls,
   MAX_PORTFOLIO_IMAGE_BYTES,
   MAX_SLUG_LENGTH,
+  normalizeSupabaseBase,
   PORTFOLIO_BUCKET,
   PORTFOLIO_COLUMNS,
   PortfolioCategory,
@@ -61,8 +63,25 @@ export class PortfolioService {
     return this.supabase.admin();
   }
 
-  private supabaseUrl(): string {
-    return this.config.get('SUPABASE_URL', { infer: true });
+  /**
+   * Addresses our Storage is reached at: SUPABASE_URL (what the API uses) and,
+   * when set, SUPABASE_PUBLIC_URL (what browsers use, e.g. self-hosted Supabase
+   * behind an internal Docker hostname). Public first.
+   */
+  private storageBases(): string[] {
+    const internal = this.config.get('SUPABASE_URL', { infer: true });
+    const pub = this.config.get('SUPABASE_PUBLIC_URL', { infer: true });
+    return pub ? [pub, internal] : [internal];
+  }
+
+  /** A storage URL built by supabase-js (internal base) -> one clients can reach. */
+  private publicUrl(url: string): string {
+    const pub = this.config.get('SUPABASE_PUBLIC_URL', { infer: true });
+    return publicizeStorageUrl(
+      url,
+      normalizeSupabaseBase(this.config.get('SUPABASE_URL', { infer: true })),
+      pub ? normalizeSupabaseBase(pub) : undefined,
+    );
   }
 
   // ------------------------------------------------------------ public reads
@@ -174,8 +193,9 @@ export class PortfolioService {
       this.logger.warn(`Portfolio upload signing failed: ${error?.message ?? 'no data'}`);
       throw new BadRequestException('Could not create upload URL');
     }
-    const { publicUrl } = bucket.getPublicUrl(path).data;
-    return { path, signedUrl: data.signedUrl, token: data.token, publicUrl };
+    // Both URLs are built from SUPABASE_URL; hand out the public address.
+    const publicUrl = this.publicUrl(bucket.getPublicUrl(path).data.publicUrl);
+    return { path, signedUrl: this.publicUrl(data.signedUrl), token: data.token, publicUrl };
   }
 
   // ------------------------------------------------------------ helpers
@@ -205,7 +225,7 @@ export class PortfolioService {
   }
 
   private assertImageUrls(dto: CreatePortfolioDto | UpdatePortfolioDto): void {
-    const invalid = invalidImageUrls(dto, this.supabaseUrl());
+    const invalid = invalidImageUrls(dto, this.storageBases());
     if (invalid.length > 0) {
       throw new BadRequestException({
         message: 'Images must be uploaded to the portfolio bucket (POST /portfolio/uploads/sign)',

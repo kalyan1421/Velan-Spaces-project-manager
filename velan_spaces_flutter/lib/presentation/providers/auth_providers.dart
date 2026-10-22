@@ -1,56 +1,38 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:velan_spaces_flutter/core/api/api_client.dart';
+import 'package:velan_spaces_flutter/core/api/api_config.dart';
+import 'package:velan_spaces_flutter/core/api/api_exception.dart';
+import 'package:velan_spaces_flutter/core/api/token_store.dart';
 import 'package:velan_spaces_flutter/core/services/fcm_service.dart';
-import 'package:velan_spaces_flutter/data/datasources/auth_datasource.dart';
-import 'package:velan_spaces_flutter/data/datasources/firebase_auth_datasource.dart';
-import 'package:velan_spaces_flutter/data/repositories/auth_repository_impl.dart';
-import 'package:velan_spaces_flutter/domain/repositories/auth_repository.dart';
+import 'package:velan_spaces_flutter/core/session_service.dart';
+import 'package:velan_spaces_flutter/data/datasources/api_worker_manager_datasource.dart';
+import 'package:velan_spaces_flutter/data/datasources/worker_manager_datasource.dart';
 import 'package:velan_spaces_flutter/domain/entities/user_entity.dart';
 import 'package:velan_spaces_flutter/domain/entities/user_role.dart';
-import 'package:velan_spaces_flutter/data/datasources/worker_manager_datasource.dart';
-import 'package:velan_spaces_flutter/data/datasources/firestore_worker_manager_datasource.dart';
-import 'package:velan_spaces_flutter/data/datasources/firestore_project_datasource.dart';
-import 'package:velan_spaces_flutter/data/datasources/project_datasource.dart';
-import 'package:velan_spaces_flutter/core/session_service.dart';
 
-// ─── Core Firebase Providers ──────────────────────────────────────────
+// ─── Core Providers ───────────────────────────────────────────────────
 
-final firebaseAuthProvider = Provider<FirebaseAuth>((_) => FirebaseAuth.instance);
+final apiClientProvider = Provider<ApiClient>((_) => ApiClient.instance);
+
+/// Still used by features not yet moved to the API (leads, quotations,
+/// notifications, portfolio). Removed when those modules migrate.
 final firestoreProvider = Provider<FirebaseFirestore>((_) => FirebaseFirestore.instance);
 
-// ─── Datasource & Repository ──────────────────────────────────────────
-
-final authDatasourceProvider = Provider<AuthDatasource>((ref) {
-  return FirebaseAuthDatasourceImpl(
-    firebaseAuth: ref.watch(firebaseAuthProvider),
-    firestore: ref.watch(firestoreProvider),
-  );
-});
-
-final authRepositoryProvider = Provider<AuthRepository>((ref) {
-  return AuthRepositoryImpl(ref.watch(authDatasourceProvider));
-});
-
 final workerManagerDatasourceProvider = Provider<WorkerManagerDatasource>((ref) {
-  return FirestoreWorkerManagerDatasourceImpl(ref.watch(firestoreProvider));
-});
-
-final firestoreProjectDatasourceProvider = Provider<ProjectDatasource>((ref) {
-  return FirestoreProjectDatasourceImpl(ref.watch(firestoreProvider));
+  return ApiWorkerManagerDatasource(ref.watch(apiClientProvider));
 });
 
 // ─── Auth State ───────────────────────────────────────────────────────
 
-final authStateChangesProvider = StreamProvider<UserEntity?>((ref) {
-  return ref.watch(authRepositoryProvider).authStateChanges;
-});
-
 final currentUserRoleProvider = StateProvider<UserRole>((_) => UserRole.unknown);
 
+/// Signed-in user details: id, name, email, username, and for clients
+/// projectId (first project) + projectIds.
 final currentUserMetaProvider = StateProvider<Map<String, dynamic>>((_) => {});
 
 // ─── Auth Notifier ────────────────────────────────────────────────────
@@ -60,229 +42,196 @@ final authNotifierProvider =
   return AuthNotifier(ref);
 });
 
+/// Sign-in against the Velan backend: email (or a worker's username) +
+/// password, or Google for existing accounts. The backend issues the session;
+/// the role comes from the server, never from the device.
 class AuthNotifier extends StateNotifier<AsyncValue<UserEntity?>> {
+  AuthNotifier(this._ref) : super(const AsyncValue.data(null)) {
+    _api.onSessionExpired = _onSessionExpired;
+  }
+
   final Ref _ref;
+  bool _googleReady = false;
 
-  AuthNotifier(this._ref) : super(const AsyncValue.data(null));
+  ApiClient get _api => _ref.read(apiClientProvider);
 
-  AuthRepository get _authRepository => _ref.read(authRepositoryProvider);
-
-  /// Helper to set role/meta and persist to storage
   Future<void> _setSessionAndPersist(UserRole role, Map<String, dynamic> meta) async {
     _ref.read(currentUserRoleProvider.notifier).state = role;
     _ref.read(currentUserMetaProvider.notifier).state = meta;
     await SessionService.saveSession(role: role, meta: meta);
   }
 
-  /// Restore a previous session from secure storage (called on app startup)
+  /// Restore the previous session on startup (tokens in secure storage).
   Future<bool> restoreSession() async {
-    final session = await SessionService.loadSession();
-    if (session == null) return false;
-
-    // Check if Firebase still has a valid user
-    final firebaseUser = FirebaseAuth.instance.currentUser;
-    if (firebaseUser == null) {
-      // Firebase session expired, clear local session too
+    if (!await TokenStore.instance.hasSession) {
       await SessionService.clearSession();
       return false;
     }
+    try {
+      // Refreshes the access token transparently if it has expired. Bounded:
+      // this runs before the first frame, so a slow server must not hang
+      // app start; we fall back to the cached profile instead.
+      final me = await _api.get('/auth/me').timeout(
+            const Duration(seconds: 6),
+            onTimeout: () => throw ApiException(0, 'Server did not respond'),
+          ) as Map<String, dynamic>;
+      await _applyUser(me);
+      if (kDebugMode) print('✅ Session restored: ${_ref.read(currentUserRoleProvider).name}');
+      return true;
+    } on ApiException catch (e) {
+      if (e.isNetwork) {
+        // Offline start: keep the user signed in with the cached profile.
+        final cached = await SessionService.loadSession();
+        if (cached != null) {
+          _ref.read(currentUserRoleProvider.notifier).state = cached.role;
+          _ref.read(currentUserMetaProvider.notifier).state = cached.meta;
+          state = AsyncValue.data(UserEntity(uid: cached.meta['id'] as String? ?? ''));
+          return true;
+        }
+      }
+      await _clearLocal();
+      return false;
+    }
+  }
 
-    // Restore role and metadata
-    _ref.read(currentUserRoleProvider.notifier).state = session.role;
-    _ref.read(currentUserMetaProvider.notifier).state = session.meta;
+  /// Email (or worker username) + password.
+  Future<bool> signInWithPassword(String identifier, String password) async {
+    if (identifier.trim().isEmpty || password.isEmpty) {
+      state = AsyncValue.error('Enter your email or username and password', StackTrace.current);
+      return false;
+    }
+    state = const AsyncValue.loading();
+    try {
+      final res = await _api.postPublic('/auth/login', {
+        'identifier': identifier.trim(),
+        'password': password,
+      }) as Map<String, dynamic>;
+      return await _completeSignIn(res);
+    } on ApiException catch (e) {
+      state = AsyncValue.error(e.message, StackTrace.current);
+      return false;
+    }
+  }
 
-    // Create a simple UserEntity from the existing Firebase user
-    state = AsyncValue.data(UserEntity(
-      uid: firebaseUser.uid,
-      email: firebaseUser.email,
-    ));
+  /// Google sign-in for accounts the administrator already created.
+  Future<bool> signInWithGoogle() async {
+    state = const AsyncValue.loading();
+    try {
+      await _ensureGoogle();
+      final account = await GoogleSignIn.instance.authenticate();
+      final idToken = account.authentication.idToken;
+      // We only need Google to prove the email; the app session is ours.
+      unawaited(GoogleSignIn.instance.signOut());
+      if (idToken == null) throw ApiException(401, 'Google did not return a sign-in token');
+      final res = await _api.postPublic('/auth/google', {'idToken': idToken}) as Map<String, dynamic>;
+      return await _completeSignIn(res);
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) {
+        state = const AsyncValue.data(null);
+      } else {
+        state = AsyncValue.error(e.description ?? 'Google sign-in failed', StackTrace.current);
+      }
+      return false;
+    } on ApiException catch (e) {
+      state = AsyncValue.error(e.message, StackTrace.current);
+      return false;
+    }
+  }
 
-    if (kDebugMode) print('✅ Session restored: ${session.role.name}');
+  Future<void> _ensureGoogle() async {
+    if (_googleReady) return;
+    await GoogleSignIn.instance.initialize(
+      clientId: kIsWeb
+          ? ApiConfig.googleWebClientId
+          : (ApiConfig.googleIosClientId.isEmpty ? null : ApiConfig.googleIosClientId),
+      serverClientId:
+          ApiConfig.googleServerClientId.isEmpty ? null : ApiConfig.googleServerClientId,
+    );
+    _googleReady = true;
+  }
+
+  Future<bool> _completeSignIn(Map<String, dynamic> res) async {
+    await TokenStore.instance.save(
+      accessToken: res['accessToken'] as String,
+      refreshToken: res['refreshToken'] as String,
+    );
+    try {
+      await _applyUser(res['user'] as Map<String, dynamic>);
+    } on ApiException catch (e) {
+      await _clearLocal();
+      state = AsyncValue.error(e.message, StackTrace.current);
+      return false;
+    }
+    final userId = _ref.read(currentUserMetaProvider)['id'] as String? ?? '';
+    unawaited(_initFCM(userId));
     return true;
   }
 
-  /// HEAD login with hardcoded credentials (admin / 12345)
-  Future<bool> signInAsHead(String password) async {
-    if (kDebugMode) print('🔑 Attempting Admin Login with password: $password');
-    if (password != '12345') {
-      if (kDebugMode) print('❌ Admin Login Failed: Invalid Password');
-      state = AsyncValue.error('Invalid Admin Credentials', StackTrace.current);
-      return false;
+  /// Role + profile from the server; clients also get their project(s).
+  Future<void> _applyUser(Map<String, dynamic> user) async {
+    final role = userRoleFromString(user['role'] as String?);
+    if (role == UserRole.unknown) {
+      throw ApiException(403, 'This account has no access to the app.');
     }
-    state = const AsyncValue.loading();
-    if (kDebugMode) print('🔄 Signing in anonymously to Firebase...');
-    final result = await _authRepository.signInAnonymously();
-    return result.fold(
-      (failure) {
-        if (kDebugMode) print('❌ Firebase Sign-In Failed: ${failure.message}');
-        state = AsyncValue.error(failure.message, StackTrace.current);
-        return false;
-      },
-      (user) async {
-        if (kDebugMode) print('✅ Admin Login Successful. User ID: ${user.uid}');
-        state = AsyncValue.data(user);
-        final meta = {'name': 'Admin', 'id': 'head'};
-        await _setSessionAndPersist(UserRole.head, meta);
-        // ─── Initialize FCM ────────────────────────────────────
-        unawaited(_initFCM('head'));
-        return true;
-      },
-    );
-  }
-
-  /// Manager login - simplified (any non-empty ID + password)
-  Future<bool> signInAsManager(String name, {String password = ''}) async {
-    state = const AsyncValue.loading();
-    try {
-      if (name.trim().isEmpty) {
-        state = AsyncValue.error('Manager ID required', StackTrace.current);
-        return false;
+    final meta = <String, dynamic>{
+      'id': user['id'],
+      'name': user['displayName'] ?? user['username'] ?? user['email'] ?? '',
+      'email': user['email'],
+      'username': user['username'],
+    };
+    if (role == UserRole.client) {
+      final projects = (await _api.get('/projects') as List).whereType<Map>().toList();
+      if (projects.isEmpty) {
+        throw ApiException(403, 'No project is linked to your account yet. Please contact Velan Spaces.');
       }
-      if (password.trim().isEmpty) {
-        state = AsyncValue.error('Password required', StackTrace.current);
-        return false;
-      }
-
-      final manager = await _ref.read(workerManagerDatasourceProvider).getManagerByName(name.trim());
-      if (manager == null) {
-        state = AsyncValue.error('Manager ID not found', StackTrace.current);
-        return false;
-      }
-      if (manager.password != password) {
-        state = AsyncValue.error('Invalid password', StackTrace.current);
-        return false;
-      }
-      if (manager.isSuspended) {
-        state = AsyncValue.error('Account suspended by Admin', StackTrace.current);
-        return false;
-      }
-      
-      final result = await _authRepository.signInAnonymously();
-      return await result.fold(
-        (failure) {
-          state = AsyncValue.error(failure.message, StackTrace.current);
-          return false;
-        },
-        (user) async {
-          state = AsyncValue.data(user);
-          final meta = {'name': name, 'id': manager.id};
-          await _setSessionAndPersist(UserRole.manager, meta);
-          // ─── Initialize FCM ────────────────────────────────────
-          unawaited(_initFCM(manager.id));
-          return true;
-        },
-      );
-    } catch (e) {
-      state = AsyncValue.error(e.toString(), StackTrace.current);
-      return false;
+      meta['projectId'] = projects.first['id'];
+      meta['projectIds'] = projects.map((p) => p['id']).toList();
     }
-  }
-
-  /// Worker login - simplified (any non-empty name)
-  Future<bool> signInAsWorker(String name, {String password = ''}) async {
-    state = const AsyncValue.loading();
-    try {
-      if (name.trim().isEmpty) {
-        state = AsyncValue.error('Worker ID required', StackTrace.current);
-        return false;
-      }
-      if (password.trim().isEmpty) {
-        state = AsyncValue.error('Password required', StackTrace.current);
-        return false;
-      }
-      
-      final worker = await _ref.read(workerManagerDatasourceProvider).getWorkerByName(name.trim());
-      if (worker == null) {
-        state = AsyncValue.error('Worker ID not found', StackTrace.current);
-        return false;
-      }
-      if (worker.password != password) {
-        state = AsyncValue.error('Invalid password', StackTrace.current);
-        return false;
-      }
-      
-      final result = await _authRepository.signInAnonymously();
-      return await result.fold(
-        (failure) {
-          state = AsyncValue.error(failure.message, StackTrace.current);
-          return false;
-        },
-        (user) async {
-          state = AsyncValue.data(user);
-          final meta = {'name': name, 'id': worker.id};
-          await _setSessionAndPersist(UserRole.worker, meta);
-          // Workers get FCM too
-          unawaited(_initFCM(worker.id));
-          return true;
-        },
-      );
-    } catch (e) {
-      state = AsyncValue.error(e.toString(), StackTrace.current);
-      return false;
-    }
-  }
-
-  /// Client login - validates project ID exists
-  Future<bool> signInAsClient(String projectInput) async {
-    state = const AsyncValue.loading();
-    try {
-      if (projectInput.trim().isEmpty) {
-        state = AsyncValue.error('Project ID required', StackTrace.current);
-        return false;
-      }
-
-      // Validate project exists — resolves by doc ID OR projectCode field
-      final projectDs = _ref.read(firestoreProjectDatasourceProvider);
-      final project = await projectDs.getProjectById(projectInput.trim());
-      // Use the real Firestore doc ID (not the typed code) for navigation
-      final resolvedProjectId = project.id;
-
-      final result = await _authRepository.signInAnonymously();
-      return await result.fold(
-        (failure) {
-          state = AsyncValue.error(failure.message, StackTrace.current);
-          return false;
-        },
-        (user) async {
-          state = AsyncValue.data(user);
-          final meta = {'projectId': resolvedProjectId};
-          await _setSessionAndPersist(UserRole.client, meta);
-          return true;
-        },
-      );
-    } catch (e) {
-      state = AsyncValue.error('Project not found. Check your project ID.', StackTrace.current);
-      return false;
-    }
+    state = AsyncValue.data(UserEntity(
+      uid: user['id'] as String,
+      email: user['email'] as String?,
+      role: role.name,
+    ));
+    await _setSessionAndPersist(role, meta);
   }
 
   Future<void> signOut() async {
     state = const AsyncValue.loading();
-    // Clean up FCM token before logout
-    final meta = _ref.read(currentUserMetaProvider);
-    final userId = meta['id'] as String? ?? '';
+    final userId = _ref.read(currentUserMetaProvider)['id'] as String? ?? '';
     if (userId.isNotEmpty) {
-      // Best-effort cleanup: never let a slow/unreachable APNs or network
-      // call keep the user from signing out.
+      // Best-effort: never let a slow network keep the user from signing out.
       await FCMService.instance
           .signOut(userId)
           .timeout(const Duration(seconds: 5), onTimeout: () {});
     }
-    // Clear persisted session first
+    try {
+      await _api.post('/auth/logout').timeout(const Duration(seconds: 5));
+    } catch (_) {
+      // Revocation is best-effort; local tokens are cleared regardless.
+    }
+    await _clearLocal();
+  }
+
+  Future<void> _clearLocal() async {
+    await TokenStore.instance.clear();
     await SessionService.clearSession();
-    final result = await _authRepository.signOut();
-    result.fold(
-      (failure) => state = AsyncValue.error(failure.message, StackTrace.current),
-      (_) {
-        state = const AsyncValue.data(null);
-        _ref.read(currentUserRoleProvider.notifier).state = UserRole.unknown;
-        _ref.read(currentUserMetaProvider.notifier).state = {};
-      },
-    );
+    state = const AsyncValue.data(null);
+    _ref.read(currentUserRoleProvider.notifier).state = UserRole.unknown;
+    _ref.read(currentUserMetaProvider.notifier).state = {};
+  }
+
+  /// The refresh token was rejected (expired, revoked, account suspended).
+  void _onSessionExpired() {
+    unawaited(SessionService.clearSession());
+    if (!mounted) return;
+    state = const AsyncValue.data(null);
+    _ref.read(currentUserRoleProvider.notifier).state = UserRole.unknown;
+    _ref.read(currentUserMetaProvider.notifier).state = {};
   }
 
   /// Initialize FCM push notifications for the logged-in user.
   Future<void> _initFCM(String userId) async {
+    if (userId.isEmpty) return;
     try {
       await FCMService.instance.initialize(
         userId: userId,

@@ -1,0 +1,83 @@
+name: backend-ci
+
+on:
+  pull_request:
+    paths:
+      - 'velan-backend/**'
+      - '.github/workflows/backend-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'velan-backend/**'
+      - '.github/workflows/backend-ci.yml'
+
+# Least privilege: CI only reads the repo. Nothing is pushed or deployed.
+permissions:
+  contents: read
+
+# One run per PR / branch; a new push cancels the stale run.
+concurrency:
+  group: backend-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: velan-backend
+
+jobs:
+  quality:
+    name: Typecheck, build, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # Node 22 = the runtime image (node:22-alpine) and web CI.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: velan-backend/package-lock.json
+
+      # --ignore-scripts: same as the Docker build; no dependency install scripts run.
+      - name: Install (frozen lockfile)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      # tsconfig.json covers src/ AND scripts/ (seed, ETL); the build only covers src/.
+      - name: Typecheck (app + scripts)
+        run: npx tsc -p tsconfig.json --noEmit
+
+      - name: Build
+        run: npm run build
+
+      - name: Unit tests
+        run: npm test -- --ci
+
+      # Production-dependency audit. Blocking at high+ since the Oct 2026 fixes
+      # (npm audit fix, overrides in package.json, firebase-admin 14). The
+      # remaining moderate findings need NestJS 11 (see deploy/DEPLOYMENT.md §14).
+      - name: Audit production dependencies (high+)
+        run: npm audit --omit=dev --audit-level=high
+
+  docker:
+    name: Docker image build (no push)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Build velan-api image
+        run: docker build --pull -t velan-api:ci-${{ github.sha }} .
+
+      # The quote PDF reads fonts + logo from <cwd>/assets at runtime.
+      - name: Check runtime assets are in the image
+        run: >
+          docker run --rm --entrypoint sh velan-api:ci-${{ github.sha }} -c
+          'test -f dist/main.js && test -f assets/logo.png && ls assets/fonts/*.ttf'
+
+      - name: Show image size
+        run: docker image ls velan-api:ci-${{ github.sha }}

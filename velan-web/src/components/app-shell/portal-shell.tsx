@@ -1,15 +1,60 @@
 "use client";
 
 import Link from "next/link";
+import { useParams, usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import {
+  PORTAL_SECTIONS,
+  activePortalSection,
+  portalSectionHref,
+} from "@/app/portal/projects/[id]/_components/portal-sections";
+import { cn } from "@/lib/utils";
 import { BrandMark } from "./brand-mark";
 import { BreadcrumbProvider, BreadcrumbTrail } from "./breadcrumbs";
 import { NotificationsBell } from "./notifications-bell";
 import { UserMenu, type ShellUser } from "./user-menu";
 
 /**
+ * Section tabs for the project being viewed (`/portal/projects/[id]/…`).
+ * Horizontally scrollable on phones; hidden outside a project.
+ */
+function PortalProjectNav() {
+  const params = useParams<{ id?: string }>();
+  const pathname = usePathname() ?? "";
+  const projectId = typeof params?.id === "string" ? params.id : null;
+  if (!projectId) return null;
+  const active = activePortalSection(pathname, projectId);
+
+  return (
+    <nav aria-label="Project sections" className="mx-auto w-full max-w-5xl overflow-x-auto px-4 md:px-6">
+      <ul className="flex min-w-max gap-1">
+        {PORTAL_SECTIONS.map((section) => {
+          const isActive = section.segment === active?.segment;
+          return (
+            <li key={section.segment || "overview"}>
+              <Link
+                href={portalSectionHref(projectId, section.segment)}
+                aria-current={isActive ? "page" : undefined}
+                className={cn(
+                  "relative inline-flex h-10 items-center rounded-t-md px-3 text-sm font-medium outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
+                  isActive ? "text-ink" : "text-muted-foreground hover:text-ink",
+                )}
+              >
+                {section.label}
+                {isActive && <span aria-hidden className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-gold" />}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}
+
+/**
  * Client portal chrome: logo, project-name slot (pages fill it with
- * <SetBreadcrumbs />), notifications and sign out. No budget anywhere.
+ * <SetBreadcrumbs />), project section tabs, notifications and sign out.
+ * No budget anywhere.
  */
 export function PortalShell({ user, children }: { user: ShellUser; children: ReactNode }) {
   return (
@@ -35,6 +80,7 @@ export function PortalShell({ user, children }: { user: ShellUser; children: Rea
             <NotificationsBell href="/portal/notifications" />
             <UserMenu user={user} profileHref={null} />
           </div>
+          <PortalProjectNav />
         </header>
         <main id="main-content" tabIndex={-1} className="flex-1 outline-none">
           <div className="mx-auto w-full max-w-5xl px-4 py-6 md:px-6">{children}</div>
