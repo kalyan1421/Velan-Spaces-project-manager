@@ -49,6 +49,9 @@ Points to keep in mind:
   Cloud or the client's own self-hosted Supabase.
 - The API can also be published at `api.<domain>`, for the mobile apps and the
   Flutter web build.
+- The API sends email (website enquiries → the team) through an SMTP server you
+  provide (§4.2). It is optional: without SMTP the enquiry still becomes a lead
+  and a dashboard notification. The server needs outbound access to the SMTP port.
 
 ## 2. Prerequisites
 
@@ -62,6 +65,7 @@ Points to keep in mind:
 | A git checkout of this repository | The images are built from `velan-backend/` and `velan-web/`. |
 | Node 22 and npm (one-off) | Only for running the seed script and the Supabase CLI from a workstation (§3.6). |
 | Firebase service account (optional) | For push notifications (FCM) only. |
+| SMTP account (optional) | For website-enquiry emails. Any provider (Google Workspace, Microsoft 365, SES, Brevo…). TODO(client): provider, sender address, and SPF/DKIM for its domain. |
 
 CPU architecture: both images build on `linux/amd64` and `linux/arm64`. The
 lockfiles include the musl (Alpine) native binaries for both.
@@ -93,10 +97,9 @@ npx supabase@latest db push                              # applies pending migra
 npx supabase@latest db push --db-url "postgresql://postgres:<password>@<host>:5432/postgres"
 ```
 
-- At the time of writing the folder holds `20260618170001` through `20260618170008`.
-  More files are on the way, among them `20261014100000_timeline_replace.sql` and
-  `20261014200000_website_portfolio.sql`. Always apply the folder as it is in the
-  release you deploy.
+- The folder holds the June 2026 baseline (`20260618170001` … `20260618170008`)
+  followed by dated feature migrations (`20261014…`, `20261022…`, and more as
+  features land). Always apply the folder as it is in the release you deploy.
 - Do **not** use `supabase/schema_combined.sql` for production. It is a Phase 1
   snapshot and leaves out the later migrations.
 - Migrations are forward-only. Take a backup (§11) before you apply new ones.
@@ -105,8 +108,9 @@ npx supabase@latest db push --db-url "postgresql://postgres:<password>@<host>:54
 The migrations create the buckets, so do not create them by hand:
 - Private: `project-files`, `designs`, `update-images`, `quotations`, `avatars`
   (migration `…0007`). These are reachable only through signed URLs that the API issues.
-- Public: `portfolio`, for website portfolio images. It is added by the website
-  migration that is still in progress.
+- Public: `portfolio`, for website portfolio images (migration
+  `20261014200000_website_portfolio.sql`). The API only accepts portfolio image
+  URLs under `<SUPABASE_URL or SUPABASE_PUBLIC_URL>/storage/v1/object/public/portfolio/`.
 
 Check that the project's global upload size limit (Storage settings) is at least
 as large as the biggest file users upload. Portfolio images are capped at 10 MB.
@@ -117,9 +121,31 @@ TODO(client): confirm the limit for project files.
 |---|---|---|
 | **JWT signing keys** | **Asymmetric keys (ECC P-256 / ES256)** | The API checks every access token against `<SUPABASE_URL>/auth/v1/.well-known/jwks.json` and accepts only `ES256`, `RS256` or `EdDSA`. Projects that still sign with the legacy shared secret (HS256) get **401 on every request**. On Supabase Cloud, migrate under Project Settings → JWT Keys. **Self-hosted:** TODO(client) confirm your Supabase/GoTrue version can sign with asymmetric keys and serves the JWKS endpoint. |
 | Allow new users to sign up | **Off** | Accounts are created by the API (service role) and by invites. The anon key is public, so with sign-up left on anyone could create auth users directly. |
+| Email provider | **On** | Staff and clients sign in with email + password (workers use a username that maps to an internal email). Only *sign-up* goes off, never the Email provider itself. |
 | Minimum password length | **8** | Matches the API's new-password rule (8–72 characters). |
 | Email confirmations / SMTP | TODO(client) | Configure SMTP only if Supabase emails are used. Web invites and password resets use the app's own links. |
 | Site URL / Redirect URLs | `https://velanspaces.example` | TODO(client): set to the real web domain. |
+
+Nothing in the app relies on public sign-up: staff accounts, accepted client
+invites and seed users are created with the admin API (`auth.admin.createUser`),
+password resets set the password with the admin API, and Google sign-in redeems a
+server-generated magic link for an **existing** user.
+
+Where the settings live:
+- **Supabase Cloud:** Authentication → Sign In / Providers ("Allow new users to sign
+  up" off, Email provider enabled); Authentication → Policies / Password security
+  (minimum length 8); Project Settings → JWT Keys (an ECC P-256 key is the current key).
+- **Self-hosted (GoTrue env):** `GOTRUE_DISABLE_SIGNUP=true`,
+  `GOTRUE_PASSWORD_MIN_LENGTH=8`, and keep `GOTRUE_EXTERNAL_EMAIL_ENABLED=true`. In
+  Supabase's self-hosting `.env` that is `DISABLE_SIGNUP=true` with
+  `ENABLE_EMAIL_SIGNUP=true` — despite its name, `ENABLE_EMAIL_SIGNUP=false` turns
+  off email **sign-in** too. (The same trap exists in the CLI's local
+  `config.toml`: `[auth] enable_signup = false`, but keep `[auth.email] enable_signup = true`.)
+- **Local dev:** `velan-backend/supabase/config.toml` already mirrors production
+  (`enable_signup = false`, `minimum_password_length = 8`); restart the local stack to apply.
+
+**Verify:** `curl -s https://<supabase-host>/auth/v1/settings -H "apikey: <anon key>"`
+must show `"disable_signup":true` and `"external":{…"email":true…}`.
 
 `SUPABASE_JWT_SECRET` (the legacy secret) is not used to verify tokens. Leave it empty.
 
@@ -145,8 +171,8 @@ SEED_HEAD_EMAIL=<real head email> SEED_HEAD_PASSWORD='<strong unique password>' 
 - It also creates a sample project, `VS-DEMO-001 / Demo Project`. Delete it
   before go-live.
 - **Never run `npm run seed:demo` against production.** It creates
-  `manager@`, `worker@` and `client@velanspaces.com` with the default password
-  the default seed password from `velan-backend/scripts/seed.ts`.
+  `manager@`, `worker@` and `client@velanspaces.com` with a well-known default
+  password (in `velan-backend/scripts/seed-demo.ts`). Removal commands: §12.
 
 ## 4. Configuration reference
 
@@ -161,7 +187,7 @@ There are three places where values go. None of them are committed to git.
 ### 4.1 Compose variables (`.env` at the repo root)
 | Variable | Default | Meaning |
 |---|---|---|
-| `APP_URL` | required | Public HTTPS URL of the web app, without a trailing slash. |
+| `APP_URL` | required | Public HTTPS URL of the web app, without a trailing slash. Also passed to the API as `APP_PUBLIC_URL` (invite / reset links, emails). |
 | `API_ENV_FILE` | `./velan-backend/.env` | Path to the API secrets file. |
 | `NEXT_PUBLIC_SITE_URL` | `APP_URL` | Web build value, see §4.3. |
 | `IMAGE_REMOTE_HOSTS` | any `*.supabase.co` | Web build value, see §4.3. |
@@ -179,8 +205,10 @@ start if a required value is missing or malformed.
 | Variable | Required | Default | Notes |
 |---|---|---|---|
 | `SUPABASE_URL` | ✅ | none | `https://<ref>.supabase.co` or the self-hosted URL. Token issuer and JWKS are derived from it. |
+| `SUPABASE_PUBLIC_URL` | self-hosted | `SUPABASE_URL` | Set it when the API reaches Supabase at an address browsers and phones cannot use, e.g. `SUPABASE_URL=http://kong:8000` on an internal Docker network. Value: the public HTTPS address of the same Supabase, e.g. `https://supabase.example.com`. Signed upload/download URLs and portfolio image URLs handed to clients are rewritten to it, and portfolio image URLs under either address are accepted. Its host must be in the web's `IMAGE_REMOTE_HOSTS`. Leave unset on Supabase Cloud. |
 | `SUPABASE_ANON_KEY` | ✅ | none | Used only for the password sign-in call. |
 | `SUPABASE_SERVICE_ROLE_KEY` | ✅ secret | none | Full database and storage access. Lives only in this file. |
+| `APP_PUBLIC_URL` | ✅ for prod | `http://localhost:3100` | Web app origin used in invite and password-reset links and in emails. **Compose sets it from `APP_URL`** (overriding this file). Outside Compose, set it yourself or links point at localhost. |
 | `NODE_ENV` | | `production` | Compose pins it to `production`. `development` turns on permissive CORS and Swagger. |
 | `PORT` | | `3000` | Compose pins it to `3000`. The web app's `API_URL` depends on it. |
 | `API_PREFIX` | | `api/v1` | If you change it, also change the web `API_URL` in `docker-compose.yml`. |
@@ -189,12 +217,26 @@ start if a required value is missing or malformed.
 | `ENABLE_SWAGGER` | | off in prod | Keep it off on the public API. |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | | empty | FCM push. Raw or base64 JSON. If empty, push is disabled (a warning is logged). |
 | `FIREBASE_SERVICE_ACCOUNT_PATH` | | empty | Alternative to the JSON variable. Mount the file read-only (see the comment in compose). |
-| `GOOGLE_CLIENT_IDS` | | empty (Google sign-in off) | Comma-separated OAuth client IDs (web, iOS, Android). *Added by the mobile-migration branch.* |
+| `GOOGLE_CLIENT_IDS` | | empty (Google sign-in off) | Comma-separated OAuth client IDs (web, iOS, Android). |
+| `WORKER_EMAIL_DOMAIN` | | `workers.velanspaces.invalid` | Non-deliverable domain for workers' internal auth emails (workers sign in by username). Do not change it once workers exist. |
+| `SMTP_HOST` | | empty (**email off**) | SMTP server for outgoing email. Unset = no emails are sent (the API logs one warning); website enquiries still create a lead and a dashboard notification. |
+| `SMTP_PORT` | | | e.g. `587` (STARTTLS) or `465` (implicit TLS). Allow outbound traffic to it. |
+| `SMTP_SECURE` | | `true` only for port 465 | `true` = implicit TLS (465); `false` = STARTTLS / plain (587, 25). |
+| `SMTP_USER` | | empty | SMTP login. |
+| `SMTP_PASS` | secret | empty | SMTP password or app password. Lives only in this file. |
+| `MAIL_FROM` | | `SMTP_USER` | Sender, e.g. `Velan Spaces <no-reply@velanspaces.example>`. Its domain needs SPF/DKIM for the SMTP provider, or mail lands in spam. TODO(client). |
+| `ENQUIRY_NOTIFY_EMAILS` | | empty = all active **head** users | Comma-separated recipients of website-enquiry emails, e.g. a sales inbox. |
 | `SUPABASE_JWT_SECRET` | | empty | Legacy and not used for verification. Leave it unset. |
 | `DATABASE_URL` | | empty | Not read by the running API. Leave it unset in production. |
 
 Script-only variables, which are never in the image: `SEED_HEAD_EMAIL`,
 `SEED_HEAD_PASSWORD`, `SEED_DEMO_PASSWORD`.
+
+**Runtime files.** Besides `dist/`, the API reads `velan-backend/assets/` (Noto
+Sans fonts with their OFL licence, and the logo) for the server-side quote PDF,
+resolved from its working directory (`<cwd>/assets`). The image copies it to
+`/app/assets` next to `/app/dist`. If you package the API another way, ship
+`assets/` with it and start `node dist/main.js` from the directory that holds both.
 
 ### 4.3 Web (`velan-web`)
 | Variable | When | Required | Notes |
@@ -202,7 +244,7 @@ Script-only variables, which are never in the image: `SEED_HEAD_EMAIL`,
 | `API_URL` | runtime | ✅ | Internal API base. Compose sets `http://api:3000/api/v1`. Server-side only. |
 | `APP_URL` | runtime | ✅ | Public origin of the web app, e.g. `https://velanspaces.example`. Used for `metadataBase` **and the CSRF origin check**: it must match the URL in the browser's address bar exactly (scheme + host, no trailing slash), or every sign-in and form submit is rejected. |
 | `NEXT_PUBLIC_SITE_URL` | **build** | recommended | Canonical origin for SEO (sitemap, canonical and OG URLs). Compose defaults it to `APP_URL`. If unset in a bare `docker build`, the site falls back to `https://velanspaces.com`. |
-| `IMAGE_REMOTE_HOSTS` | **build** | recommended | The hosts that `next/image` may load from. Grammar: `[https://]host[:port][/path/**]`, comma-separated; the path defaults to `/storage/v1/**`. Production should use the exact host (`<ref>.supabase.co` or your self-hosted Supabase host). If unset, any `*.supabase.co` is allowed. A malformed entry fails the build. |
+| `IMAGE_REMOTE_HOSTS` | **build** | recommended | The hosts that `next/image` may load from. Grammar: `[https://]host[:port][/path/**]`, comma-separated; the path defaults to `/storage/v1/**`. Production should use the exact host (`<ref>.supabase.co`, or for self-hosted Supabase the public host, i.e. the API's `SUPABASE_PUBLIC_URL`). If unset, any `*.supabase.co` is allowed. A malformed entry fails the build. |
 | `IMAGE_ALLOW_LOCAL_IP` | **build** | no | Set it to `true` only if Supabase Storage resolves to a private IP (self-hosted on a LAN or with split DNS). It turns off Next's SSRF guard for private IPs. |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | **build** | no | Inlined into the browser bundle and also kept as runtime env in the image, so the server and browser agree. It is public and not a secret. If empty, the Google button is hidden. |
 | `PORT` / `HOSTNAME` | runtime | preset | `3100` / `0.0.0.0` |
@@ -248,7 +290,14 @@ Hardening that is already in `docker-compose.yml`:
 Building somewhere else (CI or a registry): `docker build ./velan-backend` and
 `docker build --build-arg IMAGE_REMOTE_HOSTS=… ./velan-web`, then push to the
 client's registry and set `IMAGE_PREFIX` and `IMAGE_TAG` on the server.
+The API build context must include `velan-backend/assets/` (§4.2, runtime files).
 TODO(client): container registry.
+
+CI (GitHub Actions, repository root `.github/workflows/`): `backend-ci.yml`
+(typecheck, build, unit tests, production-dependency audit, API image build with
+an `assets/` check) and `web-ci.yml` (typecheck, lint, tests, build, blocking
+`npm audit --omit=dev --audit-level=high`, web image build). Both run on pull
+requests and on pushes to `main`; neither pushes images or deploys.
 
 ## 6. Reverse proxy and TLS
 
@@ -359,6 +408,13 @@ Docker does **not** restart an *unhealthy* container by itself. `restart:
 unless-stopped` covers crashes only. If you need auto-healing, use an
 orchestrator or a watchdog. TODO(client).
 
+**Error monitoring is not wired in yet** (spec R-A6). Until it is, 5xx errors are
+only in the container logs (`docker compose logs api | grep -i error`). The
+recommended setup keeps data on the client's infrastructure: a self-hosted
+Sentry-compatible server (GlitchTip) plus the Sentry SDKs in the API and web,
+enabled by a DSN env var (unset = off). TODO(client): choose self-hosted
+GlitchTip vs Sentry SaaS.
+
 ## 10. Logs, updates and rollback
 
 ```bash
@@ -416,37 +472,76 @@ in `docker-compose.yml` or in build args. `NEXT_PUBLIC_*` values are public by d
 
 **Before go-live, delete all seed and demo data:** the users `manager@`,
 `worker@` and `client@velanspaces.com` (Supabase Auth **and** the `users` table),
-the project `VS-DEMO-001`, and any account that ever used the default password
-the default seed password from `velan-backend/scripts/seed.ts`.
+the project `VS-DEMO-001`, and any account that ever used a default seed
+password (`velan-backend/scripts/seed.ts`, `seed-demo.ts`).
+
+Take a backup first (§11). Then, in the Supabase SQL editor or with
+`psql "$DB_URL"`:
+
+```sql
+-- 1. Look first: these are the rows that will go.
+select id, email, role from public.users
+ where email in ('manager@velanspaces.com', 'worker@velanspaces.com', 'client@velanspaces.com');
+select id, project_code, project_name from public.projects where project_code = 'VS-DEMO-001';
+-- Write down the project id: its files live under projects/<id>/ in the storage buckets.
+
+-- 2. Delete (one transaction).
+begin;
+-- Project children (updates, designs, files, timeline, budget, chat…) cascade;
+-- portfolio items linked to it are kept and unlinked.
+delete from public.projects where project_code = 'VS-DEMO-001';
+-- App profiles: memberships, links and notifications cascade; authored rows stay, unattributed.
+delete from public.users
+ where email in ('manager@velanspaces.com', 'worker@velanspaces.com', 'client@velanspaces.com');
+-- Sign-in identities (public.users has no FK to auth.users, so both deletes are needed).
+delete from auth.users
+ where email in ('manager@velanspaces.com', 'worker@velanspaces.com', 'client@velanspaces.com');
+commit;
+```
+
+3. Storage: delete the `projects/<id>/` folders of the demo project in each
+   private bucket (`project-files`, `designs`, `update-images`, `quotations`) from
+   Studio → Storage. Database deletes do not remove files.
+4. If the head was seeded with the default `head@velanspaces.com` or a default
+   password: sign in, change the password (or create the real head and delete
+   that account the same way). Check Authentication → Users for anything else
+   created during testing.
 
 ## 13. Go-live checklist
 
+- [ ] The release commit is green in `backend-ci` and `web-ci` (repository root `.github/workflows/`, §5).
 - [ ] Supabase: every migration applied (§3.2). Buckets exist, including `portfolio` (§3.3).
-- [ ] Supabase Auth: **asymmetric JWT signing keys**, sign-ups **off**, minimum password length 8 (§3.4).
-- [ ] The API env file has real keys, `TRUST_PROXY_HOPS=1`, Swagger off, and `CORS_ORIGINS` empty unless the Flutter web build needs it.
-- [ ] Web built with `IMAGE_REMOTE_HOSTS=<exact Supabase host>`, the right `NEXT_PUBLIC_SITE_URL`, and the right `NEXT_PUBLIC_GOOGLE_CLIENT_ID` (or none). `APP_URL` matches the real public origin.
+- [ ] Supabase Auth (§3.4): **asymmetric JWT signing keys** (ES256 current key), sign-ups **off**, Email provider **on**, minimum password length **8**. The `/auth/v1/settings` check shows `"disable_signup":true`.
+- [ ] The API env file has real keys, `TRUST_PROXY_HOPS=1`, Swagger off, and `CORS_ORIGINS` empty unless the Flutter web build needs it. Self-hosted Supabase on an internal address: `SUPABASE_PUBLIC_URL` is set (§4.2).
+- [ ] Email (if used): `SMTP_*`, `MAIL_FROM` and `ENQUIRY_NOTIFY_EMAILS` set, SPF/DKIM done for the sender domain. A test enquiry from the public site creates a lead in Sales, notifies the head in the dashboard, and the email arrives (not in spam). Without SMTP, the lead and notification still appear.
+- [ ] Web built with `IMAGE_REMOTE_HOSTS=<exact Supabase host>`, the right `NEXT_PUBLIC_SITE_URL`, and the right `NEXT_PUBLIC_GOOGLE_CLIENT_ID` (or none). `APP_URL` matches the real public origin (Compose also passes it to the API as `APP_PUBLIC_URL`, so invite and reset links use it).
 - [ ] DNS points at the server. HTTPS works on the web and API domains, and HTTP redirects to HTTPS.
 - [ ] `docker compose ps` shows `api` and `web` healthy, and the API health body says `"status":"ok"`.
 - [ ] Ports 3000 and 3100 are **not** reachable from the internet (test from outside the server).
 - [ ] Rate-limit test from §7 passes (per-IP, not global).
-- [ ] Head can log in on the web and the mobile app. Each role lands on the right area. Uploads and images load.
-- [ ] Seed and demo accounts and `VS-DEMO-001` are deleted (§12). The head password has been changed.
+- [ ] Head can log in on the web and the mobile app. Each role lands on the right area. Uploads and images load, including a portfolio image uploaded in admin and shown on the public site.
+- [ ] A quote PDF downloaded from the API shows the logo and renders ₹ correctly (proves `assets/` shipped in the image).
+- [ ] Seed and demo accounts and `VS-DEMO-001` are deleted with the §12 commands (Auth **and** `users`, plus the project's storage folders). The head password has been changed. Authentication → Users lists only real people.
 - [ ] Backups are configured and one restore has been tested (§11). The uptime monitor is set up (§9).
 - [ ] The rollback tag is written down (the previous `IMAGE_TAG`).
 
 ## 14. Known gaps / follow-ups
 
-- **Backend CI does not run.** `velan-backend/.github/workflows/backend-ci.yml` is
-  nested inside `velan-backend/`. GitHub only runs workflows from the repository's
-  root `.github/workflows/`. It also uses Node 20, while the image uses Node 22.
-  TODO (owned by the mobile-migration session): move it to the root, and add a
-  backend `docker build` job like `web-ci.yml`.
-- **Dependency audit:** `npm audit --omit=dev` reports 1 critical and 8 high
-  findings in the API's production dependencies, and 7 high in the web app (all
-  from the `shadcn` CLI, which belongs in devDependencies). They need triage by
-  reachability before go-live.
+- **API dependency audit** (`npm audit --omit=dev`, 2026-10-22): 1 critical and
+  8 high, none reachable at runtime as the API is configured: `proxy-addr` (only
+  subnet-based `trust proxy`; we use a hop count), `multer` (no upload routes —
+  files go straight to Storage), `js-yaml`/`lodash` (Swagger and config internals,
+  no untrusted input), `node-forge`, `@grpc/grpc-js`, `@fastify/busboy` (inside
+  `firebase-admin`, which is used for FCM only). The web app has 0 findings, and
+  its CI audit is blocking. To clear the API (then make the `backend-ci` audit
+  blocking): `npm audit fix`; add `overrides` for `multer ^2.5.0`, `js-yaml ^4.3.2`,
+  `lodash ^4.18.1`, `body-parser ^1.20.6` and `rimraf → glob ^10.5.0`; upgrade
+  `firebase-admin` to `^14.5.0` (needs Node 22, which the image uses; test push
+  and the Firestore ETL export).
 - **Content-Security-Policy:** only `frame-ancestors`, `base-uri` and `object-src`
-  are set today. A nonce-based `script-src` CSP is a P1 follow-up.
+  are set today. A full policy (`script-src`, `connect-src`, `img-src` with the
+  Supabase host) is a follow-up; ship it as `Content-Security-Policy-Report-Only` first.
+- **Error monitoring** (R-A6) is not set up (§9).
 - **Single instance only** until the API rate limiter and the Next.js cache are shared (§7, §10).
 - Base images use the floating `node:22-alpine` tag. For reproducible builds, pin
   a digest with `--build-arg NODE_IMAGE=node:22-alpine@sha256:<digest>`.
