@@ -41,7 +41,20 @@ describe("projectTabsFor", () => {
       "budget",
       "settlements",
       "support",
+      "client-access",
     ]);
+  });
+
+  it("shows client access to heads and managers only", () => {
+    expect(keys(projectTabsFor("head", project()))).toContain("client-access");
+    expect(keys(projectTabsFor("manager", project()))).toContain("client-access");
+    expect(keys(projectTabsFor("worker", project({ budget: 1 })))).not.toContain("client-access");
+    expect(keys(projectTabsFor("client", project({ budget: 1 })))).not.toContain("client-access");
+  });
+
+  it("links client access under the project", () => {
+    const tab = projectTabsFor("manager", project()).find((t) => t.key === "client-access");
+    expect(tab).toEqual({ key: "client-access", label: "Client access", href: "/app/projects/p1/client-access" });
   });
 
   it("hides money tabs from a manager without budget access", () => {

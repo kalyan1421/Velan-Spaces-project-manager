@@ -15,7 +15,8 @@ export type ProjectTabKey =
   | "rooms"
   | "budget"
   | "settlements"
-  | "support";
+  | "support"
+  | "client-access";
 
 export type ProjectTab = { key: ProjectTabKey; label: string; href: string };
 
@@ -30,6 +31,7 @@ const TABS: { key: ProjectTabKey; label: string; segment: string }[] = [
   { key: "budget", label: "Budget", segment: "budget" },
   { key: "settlements", label: "Settlements", segment: "settlements" },
   { key: "support", label: "Support", segment: "support" },
+  { key: "client-access", label: "Client access", segment: "client-access" },
 ];
 
 /** Every tab segment that can exist under /app/projects/[id]. */
@@ -44,7 +46,7 @@ export function projectTabsFor(role: Role, project: Project): ProjectTab[] {
   const money = role !== "worker" && role !== "client" && hasBudgetFields(project);
   const staffOnly = role === "head" || role === "manager";
   return TABS.filter((t) => {
-    if (t.key === "workers" || t.key === "rooms") return staffOnly;
+    if (t.key === "workers" || t.key === "rooms" || t.key === "client-access") return staffOnly;
     if (t.key === "budget" || t.key === "settlements") return money;
     return true;
   }).map((t) => ({
