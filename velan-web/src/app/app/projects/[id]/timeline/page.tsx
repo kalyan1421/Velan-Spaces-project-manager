@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { ForbiddenState } from "@/components/app-shell/states";
+import { loadWorkerDirectory } from "@/components/project/media/load-content";
 import { loadRooms, loadTimeline } from "@/components/project/timeline/data.server";
 import { TimelineSkeleton } from "@/components/project/timeline/timeline-skeleton";
 import { TimelineView } from "@/components/project/timeline/timeline-view";
@@ -29,18 +30,22 @@ async function TimelineContent({ params }: { params: PageProps<"/app/projects/[i
   const { project } = result;
 
   const canListStaff = user.role === "head" || user.role === "manager";
-  const [timeline, rooms, staff] = await Promise.all([
+  const [timeline, rooms, staff, memberWorkers] = await Promise.all([
     loadTimeline(project.id),
     loadRooms(project.id),
     canListStaff ? loadStaff() : Promise.resolve([]),
+    // Workers and clients can't list staff; the members endpoint gives them names.
+    canListStaff ? Promise.resolve([]) : loadWorkerDirectory(user.role, project.id),
   ]);
   if (timeline.kind === "forbidden") return <ForbiddenState />;
 
   // Assignable people = the project's workers (names from the staff directory).
   const onProject = new Set(project.workerIds ?? []);
-  const workers = toPeople(staff)
-    .filter((p) => p.role === "worker" && onProject.has(p.id))
-    .map((p) => ({ id: p.id, name: p.name }));
+  const workers = canListStaff
+    ? toPeople(staff)
+        .filter((p) => p.role === "worker" && onProject.has(p.id))
+        .map((p) => ({ id: p.id, name: p.name }))
+    : memberWorkers;
 
   return (
     <TimelineView

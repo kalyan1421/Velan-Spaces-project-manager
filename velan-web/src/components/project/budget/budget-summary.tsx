@@ -120,7 +120,7 @@ export function BudgetSummaryCard({ health, projectId }: { health: BudgetHealth;
           <h2 className="font-heading text-base font-medium">Budget health</h2>
         </CardTitle>
         <CardDescription>
-          Spent is settlements plus expenses. Income received is shown separately and doesn&apos;t reduce spend.
+          Spent is settlements plus expenses. Income received is shown separately and doesn&apos;t reduce spend. The client sees the budget and their payments (income received: date, amount, method) on their portal, never spend or expenses.
         </CardDescription>
         <CardAction>
           <BudgetStatusBadge status={health.status} />
@@ -130,7 +130,7 @@ export function BudgetSummaryCard({ health, projectId }: { health: BudgetHealth;
         {noBudget ? (
           <p className="rounded-lg bg-muted px-3 py-2.5 text-sm text-muted-foreground">
             No budget is set for this project, so remaining money can&apos;t be tracked.{" "}
-            <Link href={`/app/projects/${projectId}/edit`} className="font-medium text-ink underline underline-offset-4">
+            <Link href={`/app/projects/${projectId}/edit#budget`} className="font-medium text-ink underline underline-offset-4">
               Set a budget
             </Link>
           </p>
@@ -161,7 +161,7 @@ export function BudgetSummaryCard({ health, projectId }: { health: BudgetHealth;
           )}
           <Stat label="Settlements" value={formatINR(health.settlementsTotal)} />
           <Stat label="Expenses" value={formatINR(health.expenseTotal)} />
-          <Stat label="Income received" value={formatINR(health.incomeTotal)} hint="Not counted in spend" />
+          <Stat label="Income received" value={formatINR(health.incomeTotal)} hint="Not counted in spend · client sees this" />
         </dl>
 
         {health.estimatedCost > 0 && (

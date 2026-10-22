@@ -6,6 +6,7 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { isApiError } from "@/lib/api/errors";
+import { cn } from "@/lib/utils";
 import { CHAT_PAGE_SIZE, projectOps, projectOpsKeys, type ChatMessage } from "@/lib/api/project-ops";
 import { ChatComposer } from "./chat-composer";
 import { ChatMessageItem, OutboxMessage, type OutboxItem } from "./chat-message";
@@ -21,7 +22,16 @@ const tempId = () => `out-${Date.now()}-${Math.random().toString(36).slice(2, 8)
  * (React Query `refetchInterval`, paused when hidden or after an access error);
  * older pages are fetched on demand and merged by id.
  */
-export function ChatPanel({ projectId, viewerId }: { projectId: string; viewerId: string }) {
+export function ChatPanel({
+  projectId,
+  viewerId,
+  heightClassName = "h-[min(60dvh,36rem)] min-h-72",
+}: {
+  projectId: string;
+  viewerId: string;
+  /** Height of the message list (the composer sits below it). */
+  heightClassName?: string;
+}) {
   const visible = usePageVisible();
   const queryClient = useQueryClient();
   const key = projectOpsKeys.chat(projectId);
@@ -133,7 +143,7 @@ export function ChatPanel({ projectId, viewerId }: { projectId: string; viewerId
             stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX;
             if (stickToBottom.current) setUnseen(false);
           }}
-          className="h-[min(60dvh,36rem)] min-h-72 overflow-y-auto rounded-xl bg-card p-3 ring-1 ring-foreground/10 sm:p-4"
+          className={cn(heightClassName, "overflow-y-auto rounded-xl bg-card p-3 ring-1 ring-foreground/10 sm:p-4")}
         >
           {latest.isPending ? (
             <div className="flex flex-col gap-3" aria-busy="true" aria-label="Loading messages">

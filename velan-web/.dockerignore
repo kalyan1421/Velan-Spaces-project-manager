@@ -8,6 +8,17 @@ build
 coverage
 *.tsbuildinfo
 
+# Test artifacts (Playwright e2e: reports, traces, screenshots)
+test-results
+playwright-report
+blob-report
+playwright/.cache
+
+# The whole e2e suite stays out of the image: e2e/.auth holds signed-in
+# session cookies + API tokens, and e2e/.output / e2e/.report traces include cookies.
+e2e
+playwright.config.ts
+
 # Secrets / local env — NEVER send to the Docker daemon. Build-time values are
 # passed as --build-arg; runtime values as container env.
 .env

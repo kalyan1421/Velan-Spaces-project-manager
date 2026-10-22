@@ -29,7 +29,7 @@ async function UpdatesContent({ params }: { params: PageProps<"/app/projects/[id
   const [updates, rooms, directory] = await Promise.all([
     loadUpdatesPage(project.id),
     loadRooms(project.id),
-    loadWorkerDirectory(user.role),
+    loadWorkerDirectory(user.role, project.id),
   ]);
   if (updates.kind === "forbidden") return <ForbiddenState />;
 

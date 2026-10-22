@@ -12,6 +12,7 @@
 
 import { z } from "zod";
 import { isApiError } from "@/lib/api/errors";
+import { formatAmountInput } from "@/lib/api/money";
 import type { ProjectInput } from "@/lib/api/project-ops";
 import type { Project, Role } from "@/lib/api/types";
 import { toNumber } from "@/lib/format";
@@ -141,7 +142,12 @@ export const PROJECT_FIELD_ORDER: (keyof ProjectFormValues)[] = [
 ];
 
 const dateKey = (value: string | null | undefined) => (value ? value.slice(0, 10) : "");
-const moneyText = (value: unknown) => (value === undefined || value === null ? "" : String(toNumber(value)));
+/** Money as the field shows it: "15,00,000"; empty when not set (0) or hidden from this role. */
+const moneyText = (value: unknown) => {
+  if (value === undefined || value === null) return "";
+  const n = toNumber(value);
+  return n === 0 ? "" : formatAmountInput(n);
+};
 
 export function projectFormDefaults(project?: Project): ProjectFormValues {
   return {
@@ -203,6 +209,60 @@ export function toProjectPayload(
   return body;
 }
 
+// ------------------------------------------------------------------ edit helpers
+
+/** Section anchors on the form: `/edit#budget` lands on the money fields, `#members` on the team. */
+export const FORM_SECTIONS = ["details", "client", "budget", "members"] as const;
+export type FormSection = (typeof FORM_SECTIONS)[number];
+
+export function sectionFromHash(hash: string | null | undefined): FormSection | null {
+  const id = (hash ?? "").replace(/^#/, "").trim().toLowerCase();
+  return (FORM_SECTIONS as readonly string[]).includes(id) ? (id as FormSection) : null;
+}
+
+const sameIds = (a: readonly string[], b: readonly string[]) => {
+  const set = new Set(a);
+  const other = new Set(b);
+  return set.size === other.size && [...set].every((id) => other.has(id));
+};
+
+/**
+ * Edit: keep only what differs from the project as loaded (member lists compared
+ * as sets), so a PATCH never re-sends fields the user didn't touch.
+ * `initial` is `toProjectPayload(projectFormDefaults(project), …)` with the same permissions.
+ */
+export function changedProjectFields(next: ProjectInput, initial: ProjectInput): ProjectInput {
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(next) as (keyof ProjectInput)[]) {
+    const value = next[key];
+    const before = initial[key];
+    if (Array.isArray(value)) {
+      if (!Array.isArray(before) || !sameIds(value, before)) out[key] = value;
+    } else if (value !== before) {
+      out[key] = value;
+    }
+  }
+  return out as ProjectInput;
+}
+
+/** Where to go after saving: back to the tab that sent the user here (`#budget` → Budget, `#members` → Workers). */
+export function returnPathAfterSave(
+  projectId: string,
+  section: FormSection | null,
+  { money }: { money: boolean },
+): string {
+  const base = `/app/projects/${encodeURIComponent(projectId)}`;
+  if (section === "budget" && money) return `${base}/budget`;
+  if (section === "members") return `${base}/workers`;
+  return base;
+}
+
+/** Where to go after creating: the client-access tab when "invite the client next" is ticked. */
+export function pathAfterCreate(projectId: string, inviteClientNext: boolean): string {
+  const base = `/app/projects/${encodeURIComponent(projectId)}`;
+  return inviteClientNext ? `${base}/client-access` : base;
+}
+
 /** The delete button stays disabled until the exact project code is typed. */
 export function canConfirmDelete(typed: string, projectCode: string): boolean {
   const code = projectCode.trim();
@@ -213,13 +273,24 @@ export function isDuplicateCodeError(error: unknown): boolean {
   return isApiError(error) && error.status === 409;
 }
 
-/** What a project delete removes (FK cascade on the server), for the confirmation dialog. */
+/**
+ * What `DELETE /projects/:id` removes: the database cascades every row that
+ * belongs to the project (checked against the FKs on `projects`).
+ */
 export const DELETE_CASCADE = [
-  "Site updates, photos and comments",
+  "Site updates, photos and their comments",
   "Designs and files",
   "Timeline phases and tasks",
   "Rooms",
-  "Budget transactions and settlements",
+  "Budget entries: expenses, income, settlements and transactions",
   "Support chat and complaints",
-  "Team and client access to this project",
+  "Notifications about this project",
+  "Team and client access, including pending client invite links",
+] as const;
+
+/** What survives a project delete — said plainly so nobody is surprised later. */
+export const DELETE_KEPT = [
+  "Staff and client accounts stay; they just lose access to this project.",
+  "Website portfolio entries linked to this project stay as they are, unlinked from it.",
+  "Uploaded photos and documents become unreachable in the app, but the API doesn't erase the files from storage.",
 ] as const;

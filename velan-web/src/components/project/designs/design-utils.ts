@@ -1,7 +1,9 @@
 /** Pure helpers for the Designs tab: grouping, titles and approval state. */
 
 import type { Design } from "@/lib/api/project-content";
+import { formatDate } from "@/lib/format";
 import { displayFileName } from "../media/media";
+import { APPROVAL_COMMENT_MAX, type ApprovalDesign, type DesignApprovalStatus } from "./design-api";
 
 export type DesignGroup = "2d" | "3d" | "quotation" | "other";
 
@@ -39,10 +41,10 @@ export function designTypeLabel(type: string): string {
   return type.trim() || "Design";
 }
 
-export type DesignGroupView = { key: DesignGroup; label: string; items: Design[] };
+export type DesignGroupView<T extends Design = Design> = { key: DesignGroup; label: string; items: T[] };
 
-export function groupDesigns(designs: Design[]): DesignGroupView[] {
-  const buckets = new Map<DesignGroup, Design[]>();
+export function groupDesigns<T extends Design>(designs: T[]): DesignGroupView<T>[] {
+  const buckets = new Map<DesignGroup, T[]>();
   for (const d of designs) {
     const key = designGroupOf(d.type);
     const list = buckets.get(key);
@@ -57,10 +59,18 @@ export function groupDesigns(designs: Design[]): DesignGroupView[] {
 }
 
 /** Quotation PDFs attached to the project live in designs; clients see them under Documents. */
-export function splitDocuments(designs: Design[]): { designs: Design[]; quotations: Design[] } {
-  const out = { designs: [] as Design[], quotations: [] as Design[] };
+export function splitDocuments<T extends Design>(designs: T[]): { designs: T[]; quotations: T[] } {
+  const out = { designs: [] as T[], quotations: [] as T[] };
   for (const d of designs) (designGroupOf(d.type) === "quotation" ? out.quotations : out.designs).push(d);
   return out;
+}
+
+/**
+ * Portal gallery: drawings and renders; quotation PDFs live under Files &
+ * documents, unless the team asked the client to approve one.
+ */
+export function portalGalleryDesigns<T extends Design>(designs: T[]): T[] {
+  return designs.filter((d) => designGroupOf(d.type) !== "quotation" || d.approvalRequired);
 }
 
 const MAX_TITLE = 300;
@@ -98,9 +108,110 @@ export function designTitle(design: Pick<Design, "title" | "fileUrl">): string {
   return FALLBACK_TITLE;
 }
 
-export type ApprovalState = "not-required" | "pending" | "approved";
+export type ApprovalState = "not-required" | "pending" | "approved" | "changes-requested";
 
-export function approvalStateOf(design: Pick<Design, "approvalRequired" | "approvalApproved">): ApprovalState {
-  if (design.approvalApproved) return "approved";
-  return design.approvalRequired ? "pending" : "not-required";
+type ApprovalFields = Pick<Design, "approvalRequired" | "approvalApproved"> & {
+  /** Present on rows from `design-api` (R-E4); older rows only have the boolean. */
+  approvalStatus?: DesignApprovalStatus | null;
+};
+
+/**
+ * Display state of a design's client approval. An approval is shown even if
+ * staff later turned "needs approval" off; a change request only while the
+ * design still needs approval.
+ */
+export function approvalStateOf(design: ApprovalFields): ApprovalState {
+  const status = design.approvalStatus ?? (design.approvalApproved ? "approved" : "pending");
+  if (status === "approved" || design.approvalApproved) return "approved";
+  if (!design.approvalRequired) return "not-required";
+  return status === "changes_requested" ? "changes-requested" : "pending";
+}
+
+export const APPROVAL_STATE_LABELS: Record<ApprovalState, string> = {
+  "not-required": "No approval needed",
+  pending: "Awaiting approval",
+  approved: "Approved",
+  "changes-requested": "Changes requested",
+};
+
+/** The client can still decide (approve, or ask for changes). */
+export function clientCanDecide(design: ApprovalFields): boolean {
+  const state = approvalStateOf(design);
+  return state === "pending" || state === "changes-requested";
+}
+
+/** Designs waiting for the client's first decision, oldest request first. */
+export function awaitingClientDecision<T extends ApprovalFields & Pick<Design, "createdAt">>(designs: T[]): T[] {
+  return designs
+    .filter((d) => approvalStateOf(d) === "pending")
+    .sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
+}
+
+export function approvalCounts(designs: ApprovalFields[]): { pending: number; changesRequested: number; approved: number } {
+  const out = { pending: 0, changesRequested: 0, approved: 0 };
+  for (const d of designs) {
+    const state = approvalStateOf(d);
+    if (state === "pending") out.pending += 1;
+    else if (state === "changes-requested") out.changesRequested += 1;
+    else if (state === "approved" && d.approvalRequired) out.approved += 1;
+  }
+  return out;
+}
+
+/**
+ * One line about the decision: staff see who decided, the client sees "You".
+ * Null when there is nothing to say (no approval needed, no decision).
+ */
+export function approvalSummary(
+  design: ApprovalFields & Pick<ApprovalDesign, "approvalDecidedAt" | "approvalDecidedByName">,
+  viewer: "staff" | "client",
+): string | null {
+  const state = approvalStateOf(design);
+  const when = design.approvalDecidedAt ? formatDate(design.approvalDecidedAt) : null;
+  const suffix = when ? ` · ${when}` : "";
+  const who = design.approvalDecidedByName?.trim() || "the client";
+  if (state === "approved") {
+    if (!design.approvalDecidedAt && !design.approvalDecidedByName) return null; // legacy approval, no record
+    return viewer === "client" ? `You approved this${suffix}` : `Approved by ${who}${suffix}`;
+  }
+  if (state === "changes-requested") {
+    return viewer === "client" ? `You asked for changes${suffix}` : `Changes requested by ${who}${suffix}`;
+  }
+  if (state === "pending") return viewer === "client" ? "Waiting for your approval" : "Waiting for the client";
+  return null;
+}
+
+/** Client-side check before sending a decision (the API enforces the same). */
+export function validateDecisionComment(status: DesignApprovalStatus, comment: string): string | null {
+  const trimmed = comment.trim();
+  if (trimmed.length > APPROVAL_COMMENT_MAX) return `Keep it under ${APPROVAL_COMMENT_MAX} characters.`;
+  if (status === "changes_requested" && !trimmed) return "Tell the team what you'd like changed.";
+  return null;
+}
+
+/** The design as it will look once a decision is saved (optimistic update). */
+export function withDecision(
+  design: ApprovalDesign,
+  decision: { status: DesignApprovalStatus; comment?: string },
+  now: Date,
+): ApprovalDesign {
+  if (decision.status === "pending") {
+    return {
+      ...design,
+      approvalRequired: true,
+      approvalApproved: false,
+      approvalStatus: "pending",
+      approvalComment: null,
+      approvalDecidedAt: null,
+      approvalDecidedBy: null,
+      approvalDecidedByName: null,
+    };
+  }
+  return {
+    ...design,
+    approvalApproved: decision.status === "approved",
+    approvalStatus: decision.status,
+    approvalComment: decision.comment?.trim() || null,
+    approvalDecidedAt: now.toISOString(),
+  };
 }

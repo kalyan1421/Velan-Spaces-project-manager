@@ -5,23 +5,29 @@ import { usePathname } from "next/navigation";
 import { SetBreadcrumbs } from "@/components/app-shell/breadcrumbs";
 import type { ProjectTab } from "@/lib/projects";
 import { cn } from "@/lib/utils";
+import { isProjectEditPath } from "./project-paths";
 
 /** Horizontal, scrollable tab bar for a project. Also owns the topbar breadcrumb trail. */
-export function ProjectTabs({ tabs, projectName }: { tabs: ProjectTab[]; projectName: string }) {
+export function ProjectTabs({ tabs, projectName, projectId }: { tabs: ProjectTab[]; projectName: string; projectId: string }) {
   const pathname = usePathname() ?? "";
-  const active =
-    [...tabs].sort((a, b) => b.href.length - a.href.length).find((t) => pathname === t.href || pathname.startsWith(`${t.href}/`)) ??
-    tabs[0];
   const overview = tabs[0];
+  // The edit page lives under the project but isn't a tab: no tab is highlighted there.
+  const editing = isProjectEditPath(pathname, projectId);
+  const active = editing
+    ? undefined
+    : ([...tabs].sort((a, b) => b.href.length - a.href.length).find((t) => pathname === t.href || pathname.startsWith(`${t.href}/`)) ??
+      tabs[0]);
 
   return (
     <>
       <SetBreadcrumbs
         items={[
           { label: "Projects", href: "/app/projects" },
-          ...(active && active.key !== "overview"
-            ? [{ label: projectName, href: overview.href }, { label: active.label }]
-            : [{ label: projectName }]),
+          ...(editing
+            ? [{ label: projectName, href: overview.href }, { label: "Edit" }]
+            : active && active.key !== "overview"
+              ? [{ label: projectName, href: overview.href }, { label: active.label }]
+              : [{ label: projectName }]),
         ]}
       />
       <nav aria-label="Project sections" className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">

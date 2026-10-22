@@ -2,11 +2,17 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "@/lib/api/errors";
 import type { Project } from "@/lib/api/types";
 import {
+  DELETE_CASCADE,
+  DELETE_KEPT,
   canConfirmDelete,
+  changedProjectFields,
   isDuplicateCodeError,
   memberPermissionsFor,
+  pathAfterCreate,
   projectFormDefaults,
   projectFormSchema,
+  returnPathAfterSave,
+  sectionFromHash,
   toProjectPayload,
   type ProjectFormValues,
 } from "./project-form-schema";
@@ -198,13 +204,87 @@ describe("projectFormDefaults", () => {
     expect(v).toMatchObject({
       projectCode: "VS-101",
       clientPhone: "+91 98400 12345",
-      budget: "1500000",
+      budget: "15,00,000",
       estimatedCost: "",
       targetEndDate: "2027-03-31",
       managerIds: ["m1"],
       workerIds: ["w1"],
       budgetAccessManagerIds: ["m1"],
     });
+  });
+
+  it("shows an unset (0) budget as empty and keeps paise", () => {
+    expect(projectFormDefaults(project({ budget: 0, estimatedCost: "1250.50" }))).toMatchObject({
+      budget: "",
+      estimatedCost: "1,250.50",
+    });
+  });
+});
+
+describe("changedProjectFields (edit sends only what changed)", () => {
+  const head = memberPermissionsFor("head", { mode: "edit", canSeeBudget: true });
+  const managerNoMoney = memberPermissionsFor("manager", { mode: "edit", canSeeBudget: false });
+  const original = project({ budget: "1500000.00", estimatedCost: "0" });
+
+  const diff = (edit: Partial<ProjectFormValues>, permissions = head, p = original) => {
+    const defaults = projectFormDefaults(p);
+    const initial = toProjectPayload(defaults, { mode: "edit", permissions });
+    return changedProjectFields(toProjectPayload({ ...defaults, ...edit }, { mode: "edit", permissions }), initial);
+  };
+
+  it("is empty when nothing changed (including reformatted money and reordered members)", () => {
+    expect(diff({})).toEqual({});
+    expect(diff({ budget: "1500000", estimatedCost: "" })).toEqual({});
+    expect(diff({ budget: "₹ 15,00,000.00" })).toEqual({});
+  });
+
+  it("sends just the edited scalar fields, with null for a cleared one", () => {
+    expect(diff({ projectName: " Lakeview Villa II ", location: "" })).toEqual({ projectName: "Lakeview Villa II", location: null });
+    expect(diff({ budget: "16,00,000" })).toEqual({ budget: 1600000 });
+    expect(diff({ targetEndDate: "2027-04-30" })).toEqual({ targetEndDate: "2027-04-30" });
+  });
+
+  it("compares member lists as sets", () => {
+    const p = project({ managerIds: ["m1", "m2"], budgetAccessManagerIds: ["m1"], workerIds: ["w1", "w2"] });
+    expect(diff({ workerIds: ["w2", "w1"] }, head, p)).toEqual({});
+    expect(diff({ workerIds: ["w1"] }, head, p)).toEqual({ workerIds: ["w1"] });
+    expect(diff({ budgetAccessManagerIds: ["m1", "m2"] }, head, p)).toEqual({ budgetAccessManagerIds: ["m1", "m2"] });
+  });
+
+  it("a manager without budget access only ever sends workers and plain fields", () => {
+    const p = project({ budget: undefined, estimatedCost: undefined });
+    expect(diff({ workerIds: ["w1", "w9"], managerIds: ["x"] }, managerNoMoney, p)).toEqual({ workerIds: ["w1", "w9"] });
+  });
+});
+
+describe("section anchors and return paths", () => {
+  it("reads only known section hashes", () => {
+    expect(sectionFromHash("#budget")).toBe("budget");
+    expect(sectionFromHash("#Members")).toBe("members");
+    expect(sectionFromHash("#nope")).toBeNull();
+    expect(sectionFromHash("")).toBeNull();
+    expect(sectionFromHash(undefined)).toBeNull();
+  });
+
+  it("returns to the tab that sent the user to the form", () => {
+    expect(returnPathAfterSave("p1", "budget", { money: true })).toBe("/app/projects/p1/budget");
+    expect(returnPathAfterSave("p1", "budget", { money: false })).toBe("/app/projects/p1");
+    expect(returnPathAfterSave("p1", "members", { money: false })).toBe("/app/projects/p1/workers");
+    expect(returnPathAfterSave("p1", null, { money: true })).toBe("/app/projects/p1");
+  });
+
+  it("goes to client access after creating when asked", () => {
+    expect(pathAfterCreate("p1", false)).toBe("/app/projects/p1");
+    expect(pathAfterCreate("p1", true)).toBe("/app/projects/p1/client-access");
+  });
+});
+
+describe("delete warning", () => {
+  it("lists what the cascade removes and what survives", () => {
+    expect(DELETE_CASCADE.length).toBeGreaterThan(5);
+    expect(DELETE_CASCADE.join(" ")).toMatch(/notifications/i);
+    expect(DELETE_KEPT.join(" ")).toMatch(/storage/i);
+    expect(DELETE_KEPT.join(" ")).toMatch(/portfolio/i);
   });
 });
 

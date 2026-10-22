@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { ForbiddenState } from "@/components/app-shell/states";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FilesTable, FilesTableSkeleton } from "@/components/project/files/files-table";
-import { loadFiles } from "@/components/project/media/load-content";
+import { loadSharedFiles } from "@/components/project/files/load-files";
 import { getSession } from "@/lib/auth/session";
 import { loadProject } from "@/lib/data/load-project";
 
@@ -32,7 +32,7 @@ async function FilesContent({ params }: { params: PageProps<"/app/projects/[id]/
   if (result.kind === "forbidden") return null;
   if (result.kind === "missing" || !user) notFound();
 
-  const files = await loadFiles(result.project.id);
+  const files = await loadSharedFiles(result.project.id);
   if (files.kind === "forbidden") return <ForbiddenState />;
 
   return <FilesTable projectId={result.project.id} role={user.role} initialFiles={files.data} />;

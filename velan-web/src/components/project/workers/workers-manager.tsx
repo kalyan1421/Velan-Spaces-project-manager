@@ -90,9 +90,9 @@ export function WorkersManager({ initialProject, people }: { initialProject: Pro
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href={`/app/projects/${projectId}/edit`} className={buttonVariants({ variant: "outline", size: "lg" })}>
+          <Link href={`/app/projects/${projectId}/edit#members`} className={buttonVariants({ variant: "outline", size: "lg" })}>
             <Pencil data-icon="inline-start" />
-            Edit project
+            Edit team
           </Link>
           <AddWorkersDialog available={available} pending={update.isPending} onAdd={add} />
         </div>

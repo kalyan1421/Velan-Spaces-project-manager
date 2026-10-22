@@ -2,16 +2,17 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { PageSkeleton } from "@/components/app-shell/shell-skeleton";
 import { ForbiddenState } from "@/components/app-shell/states";
-import { Badge } from "@/components/ui/badge";
 import { getSession } from "@/lib/auth/session";
 import { loadProject } from "@/lib/data/load-project";
 import { projectTabsFor } from "@/lib/projects";
+import { ProjectHeader } from "./_components/project-header";
 import { ProjectTabs } from "./_components/project-tabs";
 
 /**
  * Project frame shared by the overview and every tab page (Wave 2 adds
- * `updates/`, `designs/`, … next to `[tab]/`). Fetches the project once per
- * request (`getProject` is memoised) and renders the header + role-filtered tabs.
+ * `updates/`, `designs/`, … next to `[tab]/`; `edit/` is the project form). Fetches
+ * the project once per request (`getProject` is memoised) and renders the header
+ * (with "Edit project" for head/manager) + role-filtered tabs.
  */
 export default function ProjectLayout({ children, params }: LayoutProps<"/app/projects/[id]">) {
   return (
@@ -36,23 +37,13 @@ async function ProjectFrame({
 
   const { project } = result;
   const tabs = projectTabsFor(user.role, project);
+  // PATCH /projects/:id is head/manager (and the API checks membership).
+  const canEdit = user.role === "head" || user.role === "manager";
 
   return (
     <div className="space-y-5">
-      <header className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="truncate font-heading text-2xl font-semibold tracking-tight text-ink">{project.projectName}</h1>
-          <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-            <span className="font-mono">{project.projectCode}</span>
-            {project.location && <span aria-hidden>·</span>}
-            {project.location && <span>{project.location}</span>}
-          </p>
-        </div>
-        <Badge variant={project.isComplete ? "secondary" : "outline"} className="w-fit">
-          {project.isComplete ? "Completed" : "In progress"}
-        </Badge>
-      </header>
-      <ProjectTabs tabs={tabs} projectName={project.projectName} />
+      <ProjectHeader initialProject={project} canEdit={canEdit} />
+      <ProjectTabs tabs={tabs} projectName={project.projectName} projectId={project.id} />
       {children}
     </div>
   );

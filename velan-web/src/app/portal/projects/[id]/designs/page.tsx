@@ -4,12 +4,11 @@ import { Suspense } from "react";
 import { ForbiddenState } from "@/components/app-shell/states";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DesignsGallery, DesignsGridSkeleton } from "@/components/project/designs/designs-gallery";
-import { DocumentsList } from "@/components/project/files/documents-list";
-import { loadDesigns, loadFiles } from "@/components/project/media/load-content";
+import { loadApprovalDesigns } from "@/components/project/designs/load-designs";
 import { PortalSectionHeader } from "@/components/project/media/portal-section-header";
 import { loadProject } from "@/lib/data/load-project";
 
-export const metadata: Metadata = { title: "Designs & documents" };
+export const metadata: Metadata = { title: "Designs" };
 
 const forbidden = (
   <ForbiddenState backHref="/portal" backLabel="Back to your projects" message="This project isn't on your account." />
@@ -37,20 +36,21 @@ async function PortalDesigns({ params }: { params: PageProps<"/portal/projects/[
   if (result.kind === "missing") notFound();
   const { project } = result;
 
-  const [designs, files] = await Promise.all([loadDesigns(project.id), loadFiles(project.id)]);
-  if (designs.kind === "forbidden" || files.kind === "forbidden") return forbidden;
+  const designs = await loadApprovalDesigns(project.id);
+  if (designs.kind === "forbidden") return forbidden;
 
-  // Read-only: the portal variant renders no upload, edit or delete controls.
+  // The portal variant has no upload, edit or delete controls; the client can
+  // approve or request changes on designs the team asked them to review (R-E4).
+  // Quotation PDFs are under Files & documents.
   return (
     <div className="flex flex-col gap-8">
       <PortalSectionHeader
         projectId={project.id}
         projectName={project.projectName}
-        title="Designs & documents"
-        description="Plans, renders, quotations and documents shared with you. Tap any item to view or download it."
+        title="Designs"
+        description="Plans and renders for your home. Tap any design to view or download it, and approve the ones the team sends for your review."
       />
       <DesignsGallery projectId={project.id} role="client" variant="portal" initialDesigns={designs.data} />
-      <DocumentsList projectId={project.id} initialDesigns={designs.data} initialFiles={files.data} />
     </div>
   );
 }

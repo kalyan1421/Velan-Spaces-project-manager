@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { PageHeader } from "@/components/app-shell/page-header";
 import { PageSkeleton } from "@/components/app-shell/shell-skeleton";
 import { apiFetch } from "@/lib/api/server";
-import type { Notification } from "@/lib/api/types";
+import type { AppNotification } from "@/lib/api/notifications";
 import { NotificationsList } from "@/components/app-shell/notifications-list";
 
 export const metadata: Metadata = { title: "Notifications" };
@@ -20,6 +20,6 @@ export default function NotificationsPage() {
 }
 
 async function NotificationsContent() {
-  const list = await apiFetch<Notification[] | null>("notifications");
-  return <NotificationsList initial={Array.isArray(list) ? list : []} />;
+  const list = await apiFetch<AppNotification[] | null>("notifications");
+  return <NotificationsList initial={Array.isArray(list) ? list : []} audience="staff" />;
 }

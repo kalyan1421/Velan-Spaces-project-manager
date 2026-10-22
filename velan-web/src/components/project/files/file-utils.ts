@@ -50,7 +50,7 @@ export function buildCreateFileBody(file: { name: string; size: number; type: st
 }
 
 /** Newest first; files without a date sink to the bottom. */
-export function sortFilesNewestFirst(files: ProjectFile[]): ProjectFile[] {
+export function sortFilesNewestFirst<T extends Pick<ProjectFile, "uploadedAt">>(files: T[]): T[] {
   return [...files].sort((a, b) => (b.uploadedAt || "").localeCompare(a.uploadedAt || ""));
 }
 
