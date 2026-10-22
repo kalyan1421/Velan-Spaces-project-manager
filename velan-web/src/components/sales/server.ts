@@ -120,3 +120,12 @@ export async function loadQuotePage(quoteId: string): Promise<SalesLoad<QuotePag
   const l = q.leadId ? await optional(lead(q.leadId), null) : null;
   return { kind: "ok", data: { quote: q, catalog: c, templates: t, settings: s, lead: l?.id ? l : null } };
 }
+
+/** Every quotation, newest first, with the lead names to show when a quote has no typed name. */
+export async function loadAllQuotes(): Promise<SalesLoad<{ quotes: Quote[] }>> {
+  const result = await settle<[Quote[]]>([
+    apiFetch<unknown>(salesPaths.quotes()).then((r) => normalizeList(r, normalizeQuote)),
+  ]);
+  if (result.kind !== "ok") return result;
+  return { kind: "ok", data: { quotes: result.data[0] } };
+}

@@ -6,6 +6,8 @@ import { useId, useState } from "react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -24,9 +26,10 @@ import { useCatalog, useCreateQuote, useQuotationSettings, useTemplates } from "
 const BLANK = "__blank__";
 
 /**
- * Starts a quote for a lead: blank or from a template (priced from the current
- * rate card). The quote is created right away (the server assigns its number)
- * and the builder opens.
+ * Starts a quote: blank or from a template (priced from the current rate card).
+ * For a lead the details come from it; with `lead={null}` the user types who
+ * it's for (any person, no lead needed). The quote is created right away (the
+ * server assigns its number) and the builder opens.
  */
 export function NewQuoteDialog({
   open,
@@ -36,7 +39,7 @@ export function NewQuoteDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  lead: Lead;
+  lead: Lead | null;
   handledBy: string;
 }) {
   const router = useRouter();
@@ -47,6 +50,10 @@ export function NewQuoteDialog({
   const create = useCreateQuote();
   const [choice, setChoice] = useState<string>(BLANK);
   const [error, setError] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [location, setLocation] = useState("");
+  const [nameError, setNameError] = useState<string | null>(null);
 
   const loading = templates.isPending || catalog.isPending || settings.isPending;
   const loadFailed = templates.isError || catalog.isError || settings.isError;
@@ -57,11 +64,15 @@ export function NewQuoteDialog({
 
   const start = async () => {
     setError(null);
+    if (!lead && !name.trim()) {
+      setNameError("Enter who the quotation is for.");
+      return;
+    }
     if (!settings.data || !catalog.data) return;
     const round = settings.data.roundAmounts;
     const sections = chosen ? applyTemplate(chosen, catalog.data, { round }) : [];
     try {
-      const quote = await create.mutateAsync(newQuoteInput({ lead, settings: settings.data, sections, handledBy }));
+      const quote = await create.mutateAsync(newQuoteInput({ lead, person: { name, phone, location }, settings: settings.data, sections, handledBy }));
       if (!quote.id) throw new Error("The quote was created but the server didn't return it. Refresh the page.");
       toast.success(quote.quoteNumber ? `Quote ${quote.quoteNumber} created` : "Quote created");
       onOpenChange(false);
@@ -75,10 +86,11 @@ export function NewQuoteDialog({
     <Dialog open={open} onOpenChange={(next) => (busy && !next ? undefined : onOpenChange(next))}>
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>New quote</DialogTitle>
+          <DialogTitle>{lead ? "New quote" : "New quotation"}</DialogTitle>
           <DialogDescription>
-            Start blank or from a template. Client details, GST and validity are filled in from the lead and your
-            quotation settings.
+            {lead
+              ? "Start blank or from a template. Client details, GST and validity are filled in from the lead and your quotation settings."
+              : "For anyone — no project or account needed. Start blank or from a template; GST and validity come from your quotation settings."}
           </DialogDescription>
         </DialogHeader>
 
@@ -86,6 +98,36 @@ export function NewQuoteDialog({
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
+        )}
+
+        {!lead && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5 sm:col-span-2">
+              <Label htmlFor={`${ids}-name`}>Quotation for</Label>
+              <Input
+                id={`${ids}-name`}
+                value={name}
+                autoFocus
+                maxLength={200}
+                placeholder="Person or company name"
+                aria-invalid={nameError ? true : undefined}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  setNameError(null);
+                }}
+                disabled={busy}
+              />
+              {nameError && <p className="text-xs text-destructive">{nameError}</p>}
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor={`${ids}-phone`}>Phone (optional)</Label>
+              <Input id={`${ids}-phone`} type="tel" value={phone} maxLength={30} onChange={(e) => setPhone(e.target.value)} disabled={busy} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor={`${ids}-location`}>Site location (optional)</Label>
+              <Input id={`${ids}-location`} value={location} maxLength={200} onChange={(e) => setLocation(e.target.value)} disabled={busy} />
+            </div>
+          </div>
         )}
 
         {loading ? (

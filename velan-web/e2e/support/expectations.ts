@@ -11,15 +11,15 @@ import type { Role } from "./env";
 
 export type StaffRole = Exclude<Role, "client">;
 
-/** Sidebar labels (top level + head's Sales children), in order. */
+/** Sidebar labels (top level + Sales children), in order. */
 export const NAV: Record<StaffRole, string[]> = {
-  head: ["Projects", "Sales", "Rate card", "Templates", "Quotation settings", "Staff", "Website", "Notifications", "Profile"],
-  manager: ["Projects", "Sales", "Notifications", "Profile"],
+  head: ["Projects", "Sales", "Quotations", "Rate card", "Templates", "Quotation settings", "Staff", "Website", "Notifications", "Profile"],
+  manager: ["Projects", "Sales", "Quotations", "Notifications", "Profile"],
   worker: ["Projects", "Notifications", "Profile"],
 };
 
 /** Labels no role outside the list may see in its sidebar. */
-export const NAV_RESTRICTED = ["Sales", "Staff", "Website", "Rate card", "Templates", "Quotation settings"];
+export const NAV_RESTRICTED = ["Sales", "Quotations", "Staff", "Website", "Rate card", "Templates", "Quotation settings"];
 
 const ALL_TABS = [
   "Overview",

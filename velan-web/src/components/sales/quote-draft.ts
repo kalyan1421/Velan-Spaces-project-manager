@@ -248,23 +248,27 @@ export function addDays(dateKey: string, days: number): string {
  */
 export function newQuoteInput({
   lead,
+  person,
   settings,
   sections = [],
   handledBy = "",
   today = todayIST(),
 }: {
-  lead: Lead;
+  /** The lead this quote belongs to; null for a quotation to someone with no lead. */
+  lead: Lead | null;
+  /** Who it's for when there's no lead (typed by the user). */
+  person?: { name: string; phone?: string; location?: string };
   settings: QuotationSettings;
   sections?: QuoteSection[];
   handledBy?: string;
   today?: string;
 }): QuoteInput {
-  const enquiryDate = toDateKey(lead.createdAt) || today;
+  const enquiryDate = (lead && toDateKey(lead.createdAt)) || today;
   return {
-    leadId: lead.id,
+    leadId: lead?.id ?? null,
     status: "draft",
-    preparedForName: lead.clientName?.trim() ?? "",
-    preparedForPhone: lead.clientPhone?.trim() ?? "",
+    preparedForName: (lead?.clientName ?? person?.name ?? "").trim(),
+    preparedForPhone: (lead?.clientPhone ?? person?.phone ?? "").trim(),
     preparedForEmail: "",
     preparedForAddress: "",
     handledBy,
@@ -273,8 +277,8 @@ export function newQuoteInput({
     validUntil: addDays(today, settings.quoteValidityDays),
     enquiryDate,
     enquiryNo: "",
-    siteLocation: lead.area?.trim() ?? "",
-    projectType: lead.projectType?.trim() || settings.defaultProjectType,
+    siteLocation: (lead?.area ?? person?.location ?? "").trim(),
+    projectType: lead?.projectType?.trim() || settings.defaultProjectType,
     notIncluded: settings.defaultNotIncluded,
     sections,
     discountType: "amount",

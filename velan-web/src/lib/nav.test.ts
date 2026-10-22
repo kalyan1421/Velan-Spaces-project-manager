@@ -7,12 +7,12 @@ describe("navFor", () => {
   it("gives the head every section", () => {
     expect(labels("head")).toEqual(["Projects", "Sales", "Staff", "Website", "Notifications", "Profile"]);
     const sales = navFor("head").find((i) => i.label === "Sales");
-    expect(sales?.children?.map((c) => c.label)).toEqual(["Rate card", "Templates", "Quotation settings"]);
+    expect(sales?.children?.map((c) => c.label)).toEqual(["Quotations", "Rate card", "Templates", "Quotation settings"]);
   });
 
   it("gives managers projects and sales without admin sections", () => {
     expect(labels("manager")).toEqual(["Projects", "Sales", "Notifications", "Profile"]);
-    expect(navFor("manager").find((i) => i.label === "Sales")?.children).toBeUndefined();
+    expect(navFor("manager").find((i) => i.label === "Sales")?.children?.map((c) => c.label)).toEqual(["Quotations"]);
   });
 
   it("gives workers the minimum", () => {

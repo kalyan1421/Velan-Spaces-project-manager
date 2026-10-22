@@ -13,7 +13,13 @@ export type NavItem = {
 };
 
 const PROJECTS: NavItem = { label: "Projects", href: "/app/projects", icon: "projects" };
-const SALES: NavItem = { label: "Sales", href: "/app/sales", icon: "sales", match: ["/app/quotes"] };
+const SALES: NavItem = {
+  label: "Sales",
+  href: "/app/sales",
+  icon: "sales",
+  match: ["/app/quotes"],
+  children: [{ label: "Quotations", href: "/app/quotes" }],
+};
 const STAFF: NavItem = { label: "Staff", href: "/app/staff", icon: "staff" };
 const WEBSITE: NavItem = { label: "Website", href: "/app/website", icon: "website" };
 const NOTIFICATIONS: NavItem = { label: "Notifications", href: "/app/notifications", icon: "notifications" };
@@ -23,6 +29,7 @@ const HEAD_SALES: NavItem = {
   ...SALES,
   match: ["/app/quotes", "/app/rate-card", "/app/quote-templates", "/app/settings/quotation"],
   children: [
+    { label: "Quotations", href: "/app/quotes" },
     { label: "Rate card", href: "/app/rate-card" },
     { label: "Templates", href: "/app/quote-templates" },
     { label: "Quotation settings", href: "/app/settings/quotation" },
