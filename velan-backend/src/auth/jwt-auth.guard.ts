@@ -12,6 +12,7 @@ import { createRemoteJWKSet, jwtVerify, JWTPayload } from 'jose';
 import { IS_PUBLIC_KEY } from '../common/decorators/public.decorator';
 import { Env } from '../config/env.validation';
 import { AuthService } from './auth.service';
+import { supabaseJwtIssuer } from './jwt-issuer';
 
 /**
  * Verifies the Supabase-issued JWT against the project's JWKS (asymmetric
@@ -30,7 +31,13 @@ export class JwtAuthGuard implements CanActivate {
     private readonly authService: AuthService,
   ) {
     const url = this.config.get('SUPABASE_URL', { infer: true });
-    this.issuer = `${url}/auth/v1`;
+    // Keys are fetched over the (possibly internal) SUPABASE_URL; the issuer
+    // is Supabase Auth's external address (see jwt-issuer.ts).
+    this.issuer = supabaseJwtIssuer({
+      SUPABASE_URL: url,
+      SUPABASE_PUBLIC_URL: this.config.get('SUPABASE_PUBLIC_URL', { infer: true }),
+      SUPABASE_JWT_ISSUER: this.config.get('SUPABASE_JWT_ISSUER', { infer: true }),
+    });
     this.jwks = createRemoteJWKSet(
       new URL(`${url}/auth/v1/.well-known/jwks.json`),
     );
