@@ -8,6 +8,7 @@ import {
 import { SupabaseService } from '../../supabase/supabase.service';
 import { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { ProjectAccessService } from '../../common/services/project-access.service';
+import { NotificationsService } from '../notifications/notifications.module';
 import { sanitizeProject } from '../../common/project-view';
 import { CreateProjectDto, UpdateProjectDto } from './dto/project.dto';
 import {
@@ -41,11 +42,17 @@ function sameIds(next: string[] | undefined, current: string[]): boolean {
   return a.size === new Set(current).size && current.every((id) => a.has(id));
 }
 
+interface NewMember {
+  userId: string;
+  memberRole: MemberRole;
+}
+
 @Injectable()
 export class ProjectsService {
   constructor(
     private readonly supabase: SupabaseService,
     private readonly access: ProjectAccessService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   private db() {
@@ -165,7 +172,8 @@ export class ProjectsService {
     }
 
     try {
-      await this.syncMembers(data.id, desired);
+      const added = await this.syncMembers(data.id, desired);
+      this.notifyAssigned(data.id, data.project_name as string, added, user);
     } catch (e) {
       // Do not leave a half-created project behind.
       await this.db().from('projects').delete().eq('id', data.id);
@@ -235,12 +243,13 @@ export class ProjectsService {
       row = await this.fetchRow(id);
     }
 
-    await this.syncMembers(id, {
+    const added = await this.syncMembers(id, {
       managerIds: dto.managerIds,
       workerIds: dto.workerIds,
       clientIds: dto.clientIds,
       budgetAccessManagerIds: dto.budgetAccessManagerIds,
     });
+    this.notifyAssigned(id, row.project_name as string, added, user);
     return this.view(row, await this.membersFor([id]), { role: user.role, canSeeBudget });
   }
 
@@ -302,9 +311,9 @@ export class ProjectsService {
   }
 
   /** Apply the desired member lists to one project (provided lists replace). */
-  private async syncMembers(projectId: string, desired: DesiredMembers) {
+  private async syncMembers(projectId: string, desired: DesiredMembers): Promise<NewMember[]> {
     const provided = Object.values(desired).some((v) => v !== undefined);
-    if (!provided) return;
+    if (!provided) return [];
 
     await this.assertRoles(desired);
 
@@ -342,6 +351,26 @@ export class ProjectsService {
         .eq('user_id', u.user_id)
         .eq('member_role', 'manager');
       if (e) throw new Error(e.message);
+    }
+    return plan.inserts.map((i) => ({ userId: i.user_id, memberRole: i.member_role }));
+  }
+
+  /** Tell newly added managers and workers they were assigned. Never throws. */
+  private notifyAssigned(projectId: string, projectName: string, added: NewMember[], actor: AuthenticatedUser) {
+    for (const role of ['manager', 'worker'] as const) {
+      const ids = added.filter((m) => m.memberRole === role).map((m) => m.userId);
+      if (ids.length === 0) continue;
+      void this.notifications
+        .notifyUsers(ids, {
+          title: 'Assigned to a project',
+          body: `You were added as ${role} on ${projectName}`,
+          type: 'assignment',
+          projectId,
+          projectName,
+          senderId: actor.id,
+          senderName: actor.displayName ?? undefined,
+        })
+        .catch(() => undefined);
     }
   }
 
