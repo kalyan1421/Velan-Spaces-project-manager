@@ -6,8 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:velan_spaces_flutter/core/services/media_compression_service.dart';
 import 'package:velan_spaces_flutter/domain/entities/settlement_entity.dart';
-import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart';
-import 'package:velan_spaces_flutter/presentation/providers/notification_providers.dart';
 import 'package:velan_spaces_flutter/presentation/providers/project_providers.dart';
 
 class AddSettlementDialog extends ConsumerStatefulWidget {
@@ -127,22 +125,6 @@ class _AddSettlementDialogState extends ConsumerState<AddSettlementDialog> {
       final success = await ref.read(addSettlementNotifierProvider.notifier).addSettlement(widget.projectId, settlement);
       
       if (success && mounted) {
-        // ─── Notification trigger ─────────────────────────────
-        try {
-          final meta = ref.read(currentUserMetaProvider);
-          final repo = ref.read(projectRepositoryProvider);
-          final project = await repo.getProjectById(widget.projectId)
-              .then((r) => r.fold((_) => null, (p) => p));
-          final ns = ref.read(notificationServiceProvider);
-          await ns.notifyAdminOfSettlement(
-            projectId: widget.projectId,
-            projectName: project?.projectName ?? '',
-            senderName: meta['name'] as String? ?? 'Manager',
-            senderId: meta['id'] as String? ?? '',
-            amount: double.tryParse(_amountController.text) ?? 0,
-          );
-        } catch (_) {}
-        // ─────────────────────────────────────────────────────
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Settlement added successfully')));
       } else if (mounted) {

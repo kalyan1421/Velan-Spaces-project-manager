@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:velan_spaces_flutter/core/api/api_parse.dart';
 import 'package:velan_spaces_flutter/domain/entities/notification_entity.dart';
 
 class NotificationModel extends NotificationEntity {
@@ -15,32 +15,19 @@ class NotificationModel extends NotificationEntity {
     super.createdAt,
   });
 
-  factory NotificationModel.fromSnapshot(DocumentSnapshot snap) {
-    final data = snap.data() as Map<String, dynamic>;
+  /// Parses a row of GET /notifications (camelCase).
+  factory NotificationModel.fromApi(Map<String, dynamic> j) {
     return NotificationModel(
-      id: snap.id,
-      title: data['title'] ?? '',
-      body: data['body'] ?? '',
-      type: data['type'] ?? '',
-      projectId: data['projectId'] ?? '',
-      projectName: data['projectName'] ?? '',
-      senderId: data['senderId'] ?? '',
-      senderName: data['senderName'] ?? '',
-      isRead: data['isRead'] ?? false,
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      id: apiString(j['id']),
+      title: apiString(j['title']),
+      body: apiString(j['body']),
+      type: apiString(j['type']),
+      projectId: apiString(j['projectId']),
+      projectName: apiString(j['projectName']),
+      senderId: apiString(j['senderId']),
+      senderName: apiString(j['senderName']),
+      isRead: j['isRead'] == true,
+      createdAt: apiDate(j['createdAt']),
     );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'title': title,
-      'body': body,
-      'type': type,
-      'projectId': projectId,
-      'projectName': projectName,
-      'senderId': senderId,
-      'senderName': senderName,
-      'isRead': isRead,
-    };
   }
 }

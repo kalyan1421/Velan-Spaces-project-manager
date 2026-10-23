@@ -37,6 +37,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { budgetBreakdown, clientPaymentsSummary } from '../../common/calc';
 import { StorageService } from '../storage/storage.service';
+import { NotificationsService } from '../notifications/notifications.module';
 
 /** numeric(14,2) upper bound. */
 const MAX_AMOUNT = 999_999_999_999.99;
@@ -90,6 +91,7 @@ class BudgetService {
     private readonly supabase: SupabaseService,
     private readonly access: ProjectAccessService,
     private readonly storage: StorageService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   private db() {
@@ -136,6 +138,23 @@ class BudgetService {
       .single();
     if (error) throw new Error(error.message);
     await this.recomputeSpend(projectId);
+    // Heads only: managers without budget access must not see amounts.
+    void this.notifications
+      .notifyProjectMembers(
+        projectId,
+        {
+          title: 'Settlement logged',
+          body: `${u.displayName ?? 'Someone'} logged a settlement of ₹${Number(dto.amount).toLocaleString('en-IN')}${
+            dto.paidToName ? ` to ${dto.paidToName}` : ''
+          }`,
+          type: 'settlement',
+          entityId: data.id as string,
+          senderId: u.id,
+          senderName: u.displayName ?? undefined,
+        },
+        { heads: true },
+      )
+      .catch(() => undefined);
     return { ...data, created_by_name: u.displayName };
   }
 

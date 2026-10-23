@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:velan_spaces_flutter/core/api/api_parse.dart';
 import 'package:velan_spaces_flutter/domain/entities/lead_entity.dart';
 
 class LeadModel extends LeadEntity {
@@ -16,20 +16,19 @@ class LeadModel extends LeadEntity {
     super.createdAt,
   });
 
-  factory LeadModel.fromSnapshot(DocumentSnapshot snap) {
-    final data = snap.data() as Map<String, dynamic>;
+  factory LeadModel.fromApi(Map<String, dynamic> j) {
     return LeadModel(
-      id: snap.id,
-      clientName: data['clientName'] ?? '',
-      clientPhone: data['clientPhone'] ?? '',
-      area: data['area'] ?? '',
-      projectType: data['projectType'] ?? '',
-      source: data['source'] ?? '',
-      estimatedBudget: data['estimatedBudget'] ?? '',
-      notes: data['notes'] ?? '',
-      status: data['status'] ?? 'new',
-      assignedManagerId: data['assignedManagerId'] ?? '',
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      id: apiString(j['id']),
+      clientName: apiString(j['clientName']),
+      clientPhone: apiString(j['clientPhone']),
+      area: apiString(j['area']),
+      projectType: apiString(j['projectType']),
+      source: apiString(j['source']),
+      estimatedBudget: apiString(j['estimatedBudget']),
+      notes: apiString(j['notes']),
+      status: apiString(j['status'], 'new'),
+      assignedManagerId: apiString(j['assignedManagerId']),
+      createdAt: apiDate(j['createdAt']),
     );
   }
 

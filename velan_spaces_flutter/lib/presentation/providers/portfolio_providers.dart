@@ -1,12 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:velan_spaces_flutter/data/datasources/portfolio_datasource.dart';
+import 'package:velan_spaces_flutter/data/datasources/api_portfolio_datasource.dart';
 import 'package:velan_spaces_flutter/domain/entities/portfolio_entity.dart';
 import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart';
 
 // ─── Datasource ──────────────────────────────────────────────────────────
-final portfolioDatasourceProvider = Provider<PortfolioDatasource>((ref) {
-  final firestore = ref.watch(firestoreProvider);
-  return PortfolioDatasource(firestore);
+final portfolioDatasourceProvider = Provider<ApiPortfolioDatasource>((ref) {
+  return ApiPortfolioDatasource(ref.watch(apiClientProvider));
 });
 
 // ─── Stream ──────────────────────────────────────────────────────────────
@@ -26,7 +25,7 @@ class PortfolioController extends StateNotifier<AsyncValue<void>> {
 
   PortfolioController(this._ref) : super(const AsyncValue.data(null));
 
-  PortfolioDatasource get _datasource =>
+  ApiPortfolioDatasource get _datasource =>
       _ref.read(portfolioDatasourceProvider);
 
   Future<bool> addPortfolioItem({

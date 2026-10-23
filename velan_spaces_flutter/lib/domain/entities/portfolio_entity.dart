@@ -1,5 +1,5 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:velan_spaces_flutter/core/api/api_parse.dart';
 
 @immutable
 class PortfolioEntity {
@@ -75,36 +75,22 @@ class PortfolioModel extends PortfolioEntity {
     super.createdAt,
   });
 
-  factory PortfolioModel.fromSnapshot(DocumentSnapshot snap) {
-    final data = snap.data() as Map<String, dynamic>;
+  /// API item: `title` is the project name, `completionYear` an int.
+  factory PortfolioModel.fromApi(Map<String, dynamic> j) {
+    final year = apiInt(j['completionYear']);
     return PortfolioModel(
-      id: snap.id,
-      projectId: data['projectId'] ?? '',
-      projectName: data['projectName'] ?? '',
-      description: data['description'] ?? '',
-      category: data['category'] ?? '',
-      location: data['location'] ?? '',
-      completionYear: data['completionYear'] ?? '',
-      coverImageUrl: data['coverImageUrl'] ?? '',
-      imageUrls: List<String>.from(data['imageUrls'] ?? []),
-      status: data['status'] ?? 'draft',
-      sortOrder: data['sortOrder'] ?? 0,
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      id: apiString(j['id']),
+      projectId: apiString(j['projectId']),
+      projectName: apiString(j['title']),
+      description: apiString(j['description']),
+      category: apiString(j['category']),
+      location: apiString(j['location']),
+      completionYear: year == null ? '' : year.toString(),
+      coverImageUrl: apiString(j['coverImageUrl']),
+      imageUrls: apiStringList(j['imageUrls']),
+      status: apiString(j['status'], 'draft'),
+      sortOrder: apiInt(j['sortOrder']) ?? 0,
+      createdAt: apiDate(j['createdAt']),
     );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'projectId': projectId,
-      'projectName': projectName,
-      'description': description,
-      'category': category,
-      'location': location,
-      'completionYear': completionYear,
-      'coverImageUrl': coverImageUrl,
-      'imageUrls': imageUrls,
-      'status': status,
-      'sortOrder': sortOrder,
-    };
   }
 }

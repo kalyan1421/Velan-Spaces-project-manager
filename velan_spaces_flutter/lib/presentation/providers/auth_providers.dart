@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -19,9 +18,6 @@ import 'package:velan_spaces_flutter/domain/entities/user_role.dart';
 
 final apiClientProvider = Provider<ApiClient>((_) => ApiClient.instance);
 
-/// Still used by features not yet moved to the API (leads, quotations,
-/// notifications, portfolio). Removed when those modules migrate.
-final firestoreProvider = Provider<FirebaseFirestore>((_) => FirebaseFirestore.instance);
 
 final workerManagerDatasourceProvider = Provider<WorkerManagerDatasource>((ref) {
   return ApiWorkerManagerDatasource(ref.watch(apiClientProvider));

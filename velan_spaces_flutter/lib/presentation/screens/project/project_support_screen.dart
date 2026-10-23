@@ -6,7 +6,6 @@ import 'package:velan_spaces_flutter/domain/entities/project_chat_message_entity
 import 'package:velan_spaces_flutter/domain/entities/project_complaint_entity.dart';
 import 'package:velan_spaces_flutter/domain/entities/user_role.dart';
 import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart';
-import 'package:velan_spaces_flutter/presentation/providers/notification_providers.dart';
 import 'package:velan_spaces_flutter/presentation/providers/project_providers.dart';
 
 class ProjectSupportScreen extends ConsumerStatefulWidget {
@@ -90,22 +89,6 @@ class _ProjectSupportScreenState extends ConsumerState<ProjectSupportScreen>
           );
 
       if (!success) return;
-
-      if (role == UserRole.client || role == UserRole.worker) {
-        await ref.read(notificationServiceProvider).notifyAdminOfChat(
-              projectId: widget.projectId,
-              projectName: project.projectName,
-              senderName: senderName,
-              senderId: senderId,
-            );
-        await ref.read(notificationServiceProvider).notifyProjectManagersOfChat(
-              managerIds: project.managerIds,
-              projectId: widget.projectId,
-              projectName: project.projectName,
-              senderName: senderName,
-              senderId: senderId,
-            );
-      }
 
       _chatController.clear();
       setState(() => _pendingChatAttachment = null);
@@ -526,7 +509,6 @@ Future<void> _showCreateComplaintSheet(
                   if (!formKey.currentState!.validate()) return;
                   final meta = ref.read(currentUserMetaProvider);
                   final project = await ref.read(projectDetailProvider(projectId).future);
-                  final role = ref.read(currentUserRoleProvider);
                   final createdBy = meta['id'] as String? ?? projectId;
                   final createdByName =
                       meta['name'] as String? ?? project.clientName;
@@ -555,25 +537,6 @@ Future<void> _showCreateComplaintSheet(
                         ),
                       );
                   if (!context.mounted || !success) return;
-
-                  if (role == UserRole.client || role == UserRole.worker) {
-                    final notifications = ref.read(notificationServiceProvider);
-                    await notifications.notifyAdminOfComplaint(
-                      projectId: projectId,
-                      projectName: project.projectName,
-                      senderName: createdByName,
-                      senderId: createdBy,
-                      complaintTitle: titleController.text.trim(),
-                    );
-                    await notifications.notifyManagersOfComplaint(
-                      managerIds: project.managerIds,
-                      projectId: projectId,
-                      projectName: project.projectName,
-                      senderName: createdByName,
-                      senderId: createdBy,
-                      complaintTitle: titleController.text.trim(),
-                    );
-                  }
 
                   if (!context.mounted) return;
                   Navigator.of(sheetContext).pop();

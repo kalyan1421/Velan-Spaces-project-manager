@@ -188,18 +188,8 @@ class _QuoteBuilderScreenState extends ConsumerState<QuoteBuilderScreen> {
     final ctrl = ref.read(quotationControllerProvider.notifier);
     final meta = ref.read(currentUserMetaProvider);
 
-    var number = _quoteNumber;
-    if (number.isEmpty) {
-      number = await ctrl.nextQuoteNumber(settings.quoteNumberPrefix, _date.year);
-      if (number.isEmpty) {
-        if (!mounted) return;
-        setState(() => _saving = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to generate quote number')),
-        );
-        return;
-      }
-    }
+    // The server assigns the quote number when a new quote is created.
+    final number = _quoteNumber;
 
     var quote = QuoteEntity(
       id: widget.existing?.id ?? '',
@@ -236,7 +226,7 @@ class _QuoteBuilderScreenState extends ConsumerState<QuoteBuilderScreen> {
     setState(() => _saving = false);
     if (ok) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Quote $number saved')),
+        SnackBar(content: Text(number.isEmpty ? 'Quote saved' : 'Quote $number saved')),
       );
       Navigator.pop(context);
     } else {

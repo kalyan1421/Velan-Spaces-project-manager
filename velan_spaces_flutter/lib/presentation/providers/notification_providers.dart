@@ -1,46 +1,33 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:velan_spaces_flutter/core/services/notification_service.dart';
 import 'package:velan_spaces_flutter/data/datasources/notification_datasource.dart';
 import 'package:velan_spaces_flutter/domain/entities/notification_entity.dart';
 import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart';
 
 // ─── Datasource ──────────────────────────────────────────────────────────
 final notificationDatasourceProvider = Provider<NotificationDatasource>((ref) {
-  final firestore = ref.watch(firestoreProvider);
-  return NotificationDatasource(firestore);
+  return NotificationDatasource(ref.watch(apiClientProvider));
 });
 
-// ─── NotificationService provider ────────────────────────────────────────
-final notificationServiceProvider = Provider<NotificationService>((ref) {
-  final ds = ref.watch(notificationDatasourceProvider);
-  return NotificationService(ds);
-});
-
-// ─── Current User ID (uses stable doc-ID, not Firebase anonymous UID) ────
-// Admin  → 'head'      (set at login via meta['id'])
-// Manager → manager.id (Firestore doc ID, set at login via meta['id'])
-// Worker  → worker.id
-final _currentUserIdProvider = Provider<String>((ref) {
+/// True once a user is signed in (the API scopes everything to the caller).
+final _signedInProvider = Provider<bool>((ref) {
   final meta = ref.watch(currentUserMetaProvider);
-  // Prefer the app-level id ('head' or Firestore doc id) over Firebase uid
-  final id = meta['id'] as String?;
-  if (id != null && id.isNotEmpty) return id;
-  return meta['uid'] as String? ?? '';
+  return ((meta['id'] as String?) ?? '').isNotEmpty;
 });
 
 // ─── Notifications Stream ────────────────────────────────────────────────
-final notificationsProvider =
-    StreamProvider<List<NotificationEntity>>((ref) {
-  final ds = ref.watch(notificationDatasourceProvider);
-  final userId = ref.watch(_currentUserIdProvider);
-  if (userId.isEmpty) return Stream.value([]);
-  return ds.watchNotifications(userId);
+final notificationsProvider = StreamProvider<List<NotificationEntity>>((ref) {
+  if (!ref.watch(_signedInProvider)) return Stream.value(const []);
+  return ref.watch(notificationDatasourceProvider).watchNotifications();
 });
 
-// ─── Unread Count ────────────────────────────────────────────────────────
+// ─── Unread Count (GET /notifications/unread-count) ──────────────────────
+final _unreadCountStreamProvider = StreamProvider<int>((ref) {
+  if (!ref.watch(_signedInProvider)) return Stream.value(0);
+  return ref.watch(notificationDatasourceProvider).watchUnreadCount();
+});
+
 final unreadNotificationCountProvider = Provider<int>((ref) {
-  final notifications = ref.watch(notificationsProvider).valueOrNull ?? [];
-  return notifications.where((n) => !n.isRead).length;
+  return ref.watch(_unreadCountStreamProvider).valueOrNull ?? 0;
 });
 
 // ─── Controller ──────────────────────────────────────────────────────────
@@ -54,55 +41,29 @@ class NotificationController extends StateNotifier<AsyncValue<void>> {
 
   NotificationController(this._ref) : super(const AsyncValue.data(null));
 
-  NotificationDatasource get _datasource =>
-      _ref.read(notificationDatasourceProvider);
-
-  String get _userId {
-    final meta = _ref.read(currentUserMetaProvider);
-    // Must match _currentUserIdProvider — use stable doc ID ('head' or manager.id)
-    // NOT meta['uid'] which is the ephemeral anonymous Firebase UID
-    final id = meta['id'] as String?;
-    if (id != null && id.isNotEmpty) return id;
-    return meta['uid'] as String? ?? '';
-  }
+  NotificationDatasource get _datasource => _ref.read(notificationDatasourceProvider);
 
   Future<void> markAsRead(String notificationId) async {
-    if (_userId.isEmpty) return;
     try {
-      await _datasource.markAsRead(_userId, notificationId);
+      await _datasource.markAsRead(notificationId);
     } catch (_) {}
   }
 
-  Future<void> markAllAsRead() async {
-    if (_userId.isEmpty) return;
-    state = const AsyncValue.loading();
-    try {
-      await _datasource.markAllAsRead(_userId);
-      state = const AsyncValue.data(null);
-    } catch (e, st) {
-      state = AsyncValue.error(e, st);
-    }
-  }
+  Future<void> markAllAsRead() => _run(_datasource.markAllAsRead);
 
-  Future<void> deleteNotification(String notificationId) async {
-    if (_userId.isEmpty) return;
-    state = const AsyncValue.loading();
-    try {
-      await _datasource.deleteNotification(_userId, notificationId);
-      state = const AsyncValue.data(null);
-    } catch (e, st) {
-      state = AsyncValue.error(e, st);
-    }
-  }
+  Future<void> deleteNotification(String notificationId) =>
+      _run(() => _datasource.deleteNotification(notificationId));
 
-  Future<void> clearAll() async {
-    if (_userId.isEmpty) return;
+  /// Clears read notifications (the API keeps unread ones).
+  Future<void> clearRead() => _run(_datasource.clearRead);
+
+  Future<void> _run(Future<void> Function() action) async {
     state = const AsyncValue.loading();
     try {
-      await _datasource.clearAll(_userId);
-      state = const AsyncValue.data(null);
+      await action();
+      if (mounted) state = const AsyncValue.data(null);
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      if (mounted) state = AsyncValue.error(e, st);
     }
   }
 }

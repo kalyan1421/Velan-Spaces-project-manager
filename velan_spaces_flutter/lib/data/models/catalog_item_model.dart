@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:velan_spaces_flutter/core/api/api_parse.dart';
 import 'package:velan_spaces_flutter/domain/entities/catalog_item_entity.dart';
 
 class CatalogItemModel extends CatalogItemEntity {
@@ -13,19 +13,18 @@ class CatalogItemModel extends CatalogItemEntity {
     super.active,
   });
 
-  factory CatalogItemModel.fromSnapshot(DocumentSnapshot snap) {
-    final data = snap.data() as Map<String, dynamic>? ?? {};
+  factory CatalogItemModel.fromJson(Map<String, dynamic> data) {
     return CatalogItemModel(
-      id: snap.id,
-      name: data['name'] ?? '',
-      description: data['description'] ?? '',
+      id: apiString(data['id']),
+      name: apiString(data['name']),
+      description: apiString(data['description']),
       itemType: CatalogItemTypeX.fromName(data['itemType'] as String?),
-      uom: data['uom'] ?? '',
-      defaultSection: data['defaultSection'] ?? '',
+      uom: apiString(data['uom']),
+      defaultSection: apiString(data['defaultSection']),
       variants: ((data['variants'] as List?) ?? [])
-          .map((v) => CatalogVariant.fromJson(Map<String, dynamic>.from(v)))
+          .map((v) => CatalogVariant.fromJson(Map<String, dynamic>.from(v as Map)))
           .toList(),
-      active: data['active'] ?? true,
+      active: data['active'] as bool? ?? true,
     );
   }
 

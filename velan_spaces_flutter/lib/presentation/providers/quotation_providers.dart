@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:velan_spaces_flutter/core/services/media_compression_service.dart';
 import 'package:velan_spaces_flutter/core/services/quotation_pdf_service.dart';
-import 'package:velan_spaces_flutter/data/datasources/quotation_datasource.dart';
+import 'package:velan_spaces_flutter/data/datasources/api_quotation_datasource.dart';
 import 'package:velan_spaces_flutter/data/models/catalog_item_model.dart';
 import 'package:velan_spaces_flutter/data/models/quotation_settings_model.dart';
 import 'package:velan_spaces_flutter/data/models/quote_model.dart';
@@ -17,8 +17,8 @@ import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart'
 import 'package:velan_spaces_flutter/presentation/providers/project_providers.dart';
 
 // ── Datasource ──────────────────────────────────────────────────────────
-final quotationDatasourceProvider = Provider<QuotationDatasource>((ref) {
-  return QuotationDatasource(ref.watch(firestoreProvider));
+final quotationDatasourceProvider = Provider<ApiQuotationDatasource>((ref) {
+  return ApiQuotationDatasource(ref.watch(apiClientProvider));
 });
 
 // ── Settings ────────────────────────────────────────────────────────────
@@ -58,7 +58,7 @@ class QuotationController extends StateNotifier<AsyncValue<void>> {
   final Ref _ref;
   QuotationController(this._ref) : super(const AsyncValue.data(null));
 
-  QuotationDatasource get _ds => _ref.read(quotationDatasourceProvider);
+  ApiQuotationDatasource get _ds => _ref.read(quotationDatasourceProvider);
 
   // Settings
   Future<bool> saveSettings(QuotationSettingsEntity settings) async {
@@ -162,9 +162,9 @@ class QuotationController extends StateNotifier<AsyncValue<void>> {
   Future<String?> createQuote(QuoteEntity quote) async {
     state = const AsyncValue.loading();
     try {
-      final id = await _ds.addQuote(quote.leadId, QuoteModel.fromEntity(quote));
+      final created = await _ds.addQuote(QuoteModel.fromEntity(quote));
       state = const AsyncValue.data(null);
-      return id;
+      return created.id;
     } catch (e, st) {
       state = AsyncValue.error(e, st);
       return null;
@@ -174,8 +174,7 @@ class QuotationController extends StateNotifier<AsyncValue<void>> {
   Future<bool> updateQuote(QuoteEntity quote) async {
     state = const AsyncValue.loading();
     try {
-      await _ds.updateQuote(
-          quote.leadId, quote.id, QuoteModel.fromEntity(quote));
+      await _ds.updateQuote(quote.id, QuoteModel.fromEntity(quote));
       state = const AsyncValue.data(null);
       return true;
     } catch (e, st) {
@@ -187,7 +186,7 @@ class QuotationController extends StateNotifier<AsyncValue<void>> {
   Future<bool> deleteQuote(String leadId, String quoteId) async {
     state = const AsyncValue.loading();
     try {
-      await _ds.deleteQuote(leadId, quoteId);
+      await _ds.deleteQuote(quoteId);
       state = const AsyncValue.data(null);
       return true;
     } catch (e, st) {
@@ -196,8 +195,18 @@ class QuotationController extends StateNotifier<AsyncValue<void>> {
     }
   }
 
-  Future<String> nextQuoteNumber(String prefix, int year) =>
-      _ds.nextQuoteNumber(prefix, year);
+  /// Copies a quote as a new draft; the server assigns the new number.
+  Future<bool> duplicateQuote(String quoteId) async {
+    state = const AsyncValue.loading();
+    try {
+      await _ds.duplicateQuote(quoteId);
+      state = const AsyncValue.data(null);
+      return true;
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+      return false;
+    }
+  }
 
   /// Attaches the quote's PDF to [projectId] as a client-visible document (it
   /// surfaces in the project's Designs tab, which clients can already open).
@@ -226,8 +235,9 @@ class QuotationController extends StateNotifier<AsyncValue<void>> {
         projectId: projectId,
       );
       final res = await repo.addDesign(projectId, design);
+      final ok = res.fold((_) => false, (_) => true);
       state = const AsyncValue.data(null);
-      return res.fold((_) => false, (_) => true);
+      return ok;
     } catch (e, st) {
       state = AsyncValue.error(e, st);
       return false;
@@ -257,8 +267,9 @@ class QuotationController extends StateNotifier<AsyncValue<void>> {
           pdfUrl: url,
           status: quote.status == 'draft' ? 'sent' : quote.status,
         );
-        await _ds.updateQuote(
-            quote.leadId, quote.id, QuoteModel.fromEntity(updated));
+        // The server returns the hosted PDF as a shareable signed URL.
+        final saved = await _ds.updateQuote(quote.id, QuoteModel.fromEntity(updated));
+        if (saved.pdfUrl.isNotEmpty) return saved.pdfUrl;
       }
       return url;
     } catch (e, st) {

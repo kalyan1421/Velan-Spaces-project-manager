@@ -4,7 +4,6 @@ import 'package:velan_spaces_flutter/core/utils/bottom_sheet_utils.dart';
 import 'package:velan_spaces_flutter/domain/entities/user_role.dart';
 import 'package:velan_spaces_flutter/domain/entities/design_document_entity.dart';
 import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart';
-import 'package:velan_spaces_flutter/presentation/providers/notification_providers.dart';
 import 'package:velan_spaces_flutter/presentation/providers/project_providers.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
@@ -317,24 +316,6 @@ class _UploadDesignSheetState extends ConsumerState<_UploadDesignSheet> {
         await repo.addDesign(widget.projectId, design, filePath: _filePaths[i]);
       }
 
-      // ─── Notification trigger ─────────────────────────────
-      try {
-        final role = ref.read(currentUserRoleProvider);
-        if (role == UserRole.manager || role == UserRole.worker) {
-          final meta = ref.read(currentUserMetaProvider);
-          final project = await repo.getProjectById(widget.projectId)
-              .then((r) => r.fold((_) => null, (p) => p));
-          final ns = ref.read(notificationServiceProvider);
-          await ns.notifyAdminOfDesign(
-            projectId: widget.projectId,
-            projectName: project?.projectName ?? '',
-            senderName: userName,
-            senderId: meta['id'] as String? ?? '',
-            fileName: _titleController.text,
-          );
-        }
-      } catch (_) {}
-      // ─────────────────────────────────────────────────────
       
       if (mounted) Navigator.pop(context);
     } catch (e) {

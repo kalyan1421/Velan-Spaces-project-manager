@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:velan_spaces_flutter/core/api/api_parse.dart';
 import 'package:velan_spaces_flutter/domain/entities/expense_entity.dart';
 
@@ -31,38 +30,6 @@ class ExpenseModel extends ExpenseEntity {
       paymentMethod: apiString(j['paymentMethod']),
       proofUrl: apiString(j['proofUrl']),
     );
-  }
-
-  factory ExpenseModel.fromSnapshot(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    return ExpenseModel(
-      id: doc.id,
-      type: data['type']?.toString().toLowerCase() ?? 'debit',
-      amount: (data['amount'] as num?)?.toDouble() ?? 0.0,
-      date: DateTime.parse(data['date'] ?? DateTime.now().toIso8601String()),
-      accountDetails: data['accountDetails'] ?? '',
-      category: data['category'] ?? 'other',
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
-      projectId: data['projectId'] ?? '',
-      projectName: data['projectName'] ?? '',
-      paymentMethod: data['paymentMethod'] ?? '',
-      proofUrl: data['proofUrl'] ?? '',
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'type': type,
-      'amount': amount,
-      'date': date.toIso8601String(),
-      'accountDetails': accountDetails,
-      'category': category,
-      'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : FieldValue.serverTimestamp(),
-      'projectId': projectId,
-      'projectName': projectName,
-      'paymentMethod': paymentMethod,
-      'proofUrl': proofUrl,
-    };
   }
 
   factory ExpenseModel.fromEntity(ExpenseEntity entity) {

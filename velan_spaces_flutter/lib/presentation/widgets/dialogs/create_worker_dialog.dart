@@ -3,8 +3,6 @@ import 'package:velan_spaces_flutter/core/utils/account_validators.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:velan_spaces_flutter/core/theme.dart';
-import 'package:velan_spaces_flutter/presentation/providers/notification_providers.dart';
-import 'package:velan_spaces_flutter/presentation/providers/project_providers.dart';
 import 'package:velan_spaces_flutter/presentation/providers/worker_manager_providers.dart';
 
 class CreateWorkerBottomSheet extends ConsumerStatefulWidget {
@@ -71,26 +69,6 @@ class _CreateWorkerBottomSheetState
     if (mounted) {
       setState(() => _isLoading = false);
       if (success) {
-        // ─── Notification trigger ─────────────────────────────
-        if (widget.projectId != null) {
-          try {
-            final repo = ref.read(projectRepositoryProvider);
-            final project = await repo.getProjectById(widget.projectId!)
-                .then((r) => r.fold((_) => null, (p) => p));
-            if (project != null) {
-              final ns = ref.read(notificationServiceProvider);
-              for (final mId in project.managerIds) {
-                await ns.notifyManagerOfWorkerAdded(
-                  managerId: mId,
-                  projectId: widget.projectId!,
-                  projectName: project.projectName,
-                  workerName: _nameController.text.trim(),
-                );
-              }
-            }
-          } catch (_) {}
-        }
-        // ─────────────────────────────────────────────────────
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Worker added successfully')),

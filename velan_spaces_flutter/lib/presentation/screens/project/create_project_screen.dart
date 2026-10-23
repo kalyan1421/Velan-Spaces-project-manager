@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:velan_spaces_flutter/domain/entities/project_entity.dart';
-import 'package:velan_spaces_flutter/presentation/providers/notification_providers.dart';
 import 'package:velan_spaces_flutter/presentation/providers/project_providers.dart';
 import 'package:velan_spaces_flutter/presentation/providers/worker_manager_providers.dart';
 
@@ -71,20 +70,6 @@ class _CreateProjectScreenState extends ConsumerState<CreateProjectScreen> {
 
     final creationState = ref.read(projectCreationNotifierProvider);
     if (creationState.hasValue && creationState.value != null && mounted) {
-      // ─── Notify assigned managers ────────────────────────────────
-      try {
-        final ns = ref.read(notificationServiceProvider);
-        final projectId = creationState.value!;
-        final projectName = _nameController.text.trim();
-        for (final managerId in _selectedManagerIds) {
-          await ns.notifyManagerOfAssignment(
-            managerId: managerId,
-            projectId: projectId,
-            projectName: projectName,
-          );
-        }
-      } catch (_) {}
-      // ─────────────────────────────────────────────────────
       context.pop();
     } else if (creationState.hasError && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

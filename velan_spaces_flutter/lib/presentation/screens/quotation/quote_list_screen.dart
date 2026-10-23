@@ -298,19 +298,11 @@ class _QuoteCard extends ConsumerWidget {
                 } else if (v == 'status') {
                   _changeStatus(context, ref);
                 } else if (v == 'duplicate') {
-                  final settings =
-                      ref.read(quotationSettingsProvider).valueOrNull;
-                  final number = await ctrl.nextQuoteNumber(
-                      settings?.quoteNumberPrefix ?? 'QUO-', DateTime.now().year);
-                  if (number.isEmpty) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Failed to generate quote number')),
-                      );
-                    }
-                  } else {
-                    await ctrl.createQuote(quote.copyWith(
-                        id: '', quoteNumber: number, status: 'draft'));
+                  final ok = await ctrl.duplicateQuote(quote.id);
+                  if (!ok && context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Failed to duplicate quote')),
+                    );
                   }
                 } else if (v == 'delete') {
                   final ok = await showConfirmBottomSheet(context,

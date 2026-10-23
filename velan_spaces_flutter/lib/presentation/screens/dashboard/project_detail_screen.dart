@@ -7,7 +7,6 @@ import 'package:velan_spaces_flutter/presentation/widgets/dialogs/invite_client_
 import 'package:velan_spaces_flutter/domain/entities/user_role.dart';
 import 'package:velan_spaces_flutter/domain/entities/project_entity.dart';
 import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart';
-import 'package:velan_spaces_flutter/presentation/providers/notification_providers.dart';
 import 'package:velan_spaces_flutter/presentation/providers/project_providers.dart';
 import 'package:velan_spaces_flutter/presentation/providers/worker_manager_providers.dart';
 import 'package:velan_spaces_flutter/presentation/widgets/tabs/updates_tab.dart';
@@ -343,17 +342,6 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
                                 project.id,
                                 {'managerIds': selected.toList()},
                               );
-                              final service = ref.read(notificationServiceProvider);
-                              final newManagers = selected.difference(
-                                Set<String>.from(project.managerIds),
-                              );
-                              for (final mid in newManagers) {
-                                await service.notifyManagerOfAssignment(
-                                  managerId: mid,
-                                  projectId: project.id,
-                                  projectName: project.projectName,
-                                );
-                              }
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
