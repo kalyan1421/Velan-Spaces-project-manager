@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import 'package:velan_spaces_flutter/domain/entities/project_entity.dart';
 import 'package:velan_spaces_flutter/domain/entities/user_role.dart';
 import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart';
-import 'package:velan_spaces_flutter/presentation/providers/notification_providers.dart';
 import 'package:velan_spaces_flutter/presentation/providers/project_providers.dart';
 import 'package:velan_spaces_flutter/presentation/providers/worker_manager_providers.dart';
 
@@ -80,10 +79,6 @@ class _EditProjectScreenState extends ConsumerState<EditProjectScreen> {
 
     setState(() => _isSubmitting = true);
 
-    // Capture oldManagerIds before update for diff
-    final oldManagerIds = List<String>.from(
-        ref.read(projectDetailProvider(widget.projectId)).valueOrNull?.managerIds ?? []);
-
     final updates = {
       'projectCode': _projectCodeController.text.trim(),
       'projectName': _nameController.text.trim(),
@@ -99,24 +94,6 @@ class _EditProjectScreenState extends ConsumerState<EditProjectScreen> {
     final success = await ref.read(projectUpdateNotifierProvider.notifier).updateProject(widget.projectId, updates);
 
     if (success && mounted) {
-      // ─── Notify newly assigned managers ─────────────────────────
-      try {
-        final newManagers = _selectedManagerIds
-            .where((id) => !oldManagerIds.contains(id))
-            .toList();
-        if (newManagers.isNotEmpty) {
-          final ns = ref.read(notificationServiceProvider);
-          final projectName = _nameController.text.trim();
-          for (final mId in newManagers) {
-            await ns.notifyManagerOfAssignment(
-              managerId: mId,
-              projectId: widget.projectId,
-              projectName: projectName,
-            );
-          }
-        }
-      } catch (_) {}
-      // ─────────────────────────────────────────────────────
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Project updated successfully')),
       );

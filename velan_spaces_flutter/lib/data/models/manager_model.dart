@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:velan_spaces_flutter/core/api/api_parse.dart';
 import 'package:velan_spaces_flutter/domain/entities/manager_entity.dart';
 
@@ -25,27 +24,4 @@ class ManagerModel extends ManagerEntity {
     );
   }
 
-  factory ManagerModel.fromSnapshot(DocumentSnapshot snap) {
-    final data = snap.data() as Map<String, dynamic>;
-    return ManagerModel(
-      id: snap.id,
-      name: data['name'] ?? '',
-      phone: data['phone'] ?? '',
-      email: data['email'] ?? '',
-      password: data['password'] ?? '',
-      isSuspended: data['isSuspended'] ?? false,
-      assignedProjects: List<String>.from(data['assignedProjects'] ?? []),
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'name': name,
-      'phone': phone,
-      'email': email,
-      'password': password,
-      'isSuspended': isSuspended,
-      'assignedProjects': assignedProjects,
-    };
-  }
 }

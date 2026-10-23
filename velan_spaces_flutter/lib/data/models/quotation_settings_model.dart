@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:velan_spaces_flutter/core/api/api_parse.dart';
 import 'package:velan_spaces_flutter/domain/entities/quotation_settings_entity.dart';
 
 class QuotationSettingsModel extends QuotationSettingsEntity {
@@ -20,25 +20,23 @@ class QuotationSettingsModel extends QuotationSettingsEntity {
     super.roundAmounts,
   });
 
-  factory QuotationSettingsModel.fromSnapshot(DocumentSnapshot snap) {
-    final data = (snap.data() as Map<String, dynamic>?) ?? {};
+  factory QuotationSettingsModel.fromJson(Map<String, dynamic> data) {
     return QuotationSettingsModel(
-      companyName: data['companyName'] ?? '',
-      phone: data['phone'] ?? '',
-      email: data['email'] ?? '',
-      address: data['address'] ?? '',
-      logoUrl: data['logoUrl'] ?? '',
-      watermarkLogoUrl: data['watermarkLogoUrl'] ?? '',
-      coverImageUrl: data['coverImageUrl'] ?? '',
-      footerText: data['footerText'] ?? '',
-      defaultTerms: data['defaultTerms'] ?? '',
-      defaultNotIncluded:
-          ((data['defaultNotIncluded'] as List?) ?? []).map((e) => e.toString()).toList(),
-      quoteValidityDays: (data['quoteValidityDays'] as num?)?.toInt() ?? 15,
-      quoteNumberPrefix: data['quoteNumberPrefix'] ?? 'QUO-',
-      defaultProjectType: data['defaultProjectType'] ?? 'Residential',
-      defaultGstPercent: (data['defaultGstPercent'] as num?)?.toDouble() ?? 0,
-      roundAmounts: data['roundAmounts'] ?? true,
+      companyName: apiString(data['companyName']),
+      phone: apiString(data['phone']),
+      email: apiString(data['email']),
+      address: apiString(data['address']),
+      logoUrl: apiString(data['logoUrl']),
+      watermarkLogoUrl: apiString(data['watermarkLogoUrl']),
+      coverImageUrl: apiString(data['coverImageUrl']),
+      footerText: apiString(data['footerText']),
+      defaultTerms: apiString(data['defaultTerms']),
+      defaultNotIncluded: apiStringList(data['defaultNotIncluded']),
+      quoteValidityDays: apiInt(data['quoteValidityDays']) ?? 15,
+      quoteNumberPrefix: apiString(data['quoteNumberPrefix'], 'QUO-'),
+      defaultProjectType: apiString(data['defaultProjectType'], 'Residential'),
+      defaultGstPercent: apiDouble(data['defaultGstPercent']),
+      roundAmounts: data['roundAmounts'] as bool? ?? true,
     );
   }
 

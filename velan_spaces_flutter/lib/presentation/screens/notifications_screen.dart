@@ -19,6 +19,11 @@ class NotificationsScreen extends ConsumerWidget {
     'worker': Icons.engineering,
     'chat': Icons.chat_bubble_outline,
     'complaint': Icons.support_agent_outlined,
+    'design_approval': Icons.verified_outlined,
+    'task': Icons.task_alt,
+    'lead': Icons.person_search_outlined,
+    'invite': Icons.mail_outline,
+    'system': Icons.info_outline,
   };
 
   static const _typeColors = {
@@ -31,6 +36,11 @@ class NotificationsScreen extends ConsumerWidget {
     'worker': Color(0xFF14B8A6),
     'chat': Color(0xFF2563EB),
     'complaint': Color(0xFFDC2626),
+    'design_approval': Color(0xFF8B5CF6),
+    'task': Color(0xFF0EA5E9),
+    'lead': Color(0xFFF59E0B),
+    'invite': Color(0xFF14B8A6),
+    'system': Color(0xFF64748B),
   };
 
   @override
@@ -81,7 +91,7 @@ class NotificationsScreen extends ConsumerWidget {
           PopupMenuButton<String>(
             onSelected: (value) {
               if (value == 'clear') {
-                _confirmClearAll(context, ref);
+                _confirmClearRead(context, ref);
               }
             },
             itemBuilder: (context) => [
@@ -91,7 +101,7 @@ class NotificationsScreen extends ConsumerWidget {
                   children: [
                     Icon(Icons.delete_sweep, size: 18, color: Colors.red),
                     SizedBox(width: 8),
-                    Text('Clear All', style: TextStyle(color: Colors.red)),
+                    Text('Clear Read', style: TextStyle(color: Colors.red)),
                   ],
                 ),
               ),
@@ -335,16 +345,16 @@ class NotificationsScreen extends ConsumerWidget {
     return DateFormat('h:mm a').format(date);
   }
 
-  void _confirmClearAll(BuildContext context, WidgetRef ref) async {
+  void _confirmClearRead(BuildContext context, WidgetRef ref) async {
     final confirm = await showConfirmBottomSheet(
       context,
-      title: 'Clear All Notifications?',
-      message: 'This action cannot be undone.',
-      confirmLabel: 'Clear All',
+      title: 'Clear Read Notifications?',
+      message: 'Unread notifications are kept. This action cannot be undone.',
+      confirmLabel: 'Clear Read',
       confirmColor: Colors.red,
     );
     if (confirm == true) {
-      ref.read(notificationControllerProvider.notifier).clearAll();
+      ref.read(notificationControllerProvider.notifier).clearRead();
     }
   }
 }

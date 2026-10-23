@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:velan_spaces_flutter/core/api/api_parse.dart';
 import 'package:velan_spaces_flutter/domain/entities/catalog_item_entity.dart';
 import 'package:velan_spaces_flutter/domain/entities/quote_entity.dart';
 
@@ -48,18 +48,20 @@ class QuoteModel extends QuoteEntity {
         'amount': i.amount,
       };
 
+  static double? _optDouble(dynamic v) => v == null || v == '' ? null : apiDouble(v);
+
   static QuoteItem _itemFromJson(Map<String, dynamic> j) => QuoteItem(
         catalogItemId: j['catalogItemId'] as String?,
-        name: j['name'] ?? '',
-        description: j['description'] ?? '',
+        name: apiString(j['name']),
+        description: apiString(j['description']),
         itemType: CatalogItemTypeX.fromName(j['itemType'] as String?),
-        variantLabel: j['variantLabel'] ?? '',
-        lengthMm: (j['lengthMm'] as num?)?.toDouble(),
-        heightMm: (j['heightMm'] as num?)?.toDouble(),
-        qty: (j['qty'] as num?)?.toDouble(),
-        uom: j['uom'] ?? '',
-        rate: (j['rate'] as num?)?.toDouble() ?? 0,
-        amount: (j['amount'] as num?)?.toDouble() ?? 0,
+        variantLabel: apiString(j['variantLabel']),
+        lengthMm: _optDouble(j['lengthMm']),
+        heightMm: _optDouble(j['heightMm']),
+        qty: _optDouble(j['qty']),
+        uom: apiString(j['uom']),
+        rate: apiDouble(j['rate']),
+        amount: apiDouble(j['amount']),
       );
 
   static Map<String, dynamic> _sectionToJson(QuoteSection s) => {
@@ -69,48 +71,46 @@ class QuoteModel extends QuoteEntity {
       };
 
   static QuoteSection _sectionFromJson(Map<String, dynamic> j) => QuoteSection(
-        title: j['title'] ?? '',
+        title: apiString(j['title']),
         type: CatalogItemTypeX.fromName(j['type'] as String?),
         items: ((j['items'] as List?) ?? [])
-            .map((e) => _itemFromJson(Map<String, dynamic>.from(e)))
+            .map((e) => _itemFromJson(Map<String, dynamic>.from(e as Map)))
             .toList(),
       );
 
-  factory QuoteModel.fromSnapshot(DocumentSnapshot snap) {
-    final data = snap.data() as Map<String, dynamic>? ?? {};
+  /// Parses a `quotes` API row (camelCase; `quoteDate` is the entity's `date`).
+  factory QuoteModel.fromJson(Map<String, dynamic> data) {
     return QuoteModel(
-      id: snap.id,
-      leadId: data['leadId'] ?? '',
-      quoteNumber: data['quoteNumber'] ?? '',
-      status: data['status'] ?? 'draft',
-      preparedForName: data['preparedForName'] ?? '',
-      preparedForPhone: data['preparedForPhone'] ?? '',
-      preparedForEmail: data['preparedForEmail'] ?? '',
-      preparedForAddress: data['preparedForAddress'] ?? '',
-      pdfUrl: data['pdfUrl'] ?? '',
-      handledBy: data['handledBy'] ?? '',
-      designedBy: data['designedBy'] ?? '',
-      date: (data['date'] as Timestamp?)?.toDate(),
-      validUntil: (data['validUntil'] as Timestamp?)?.toDate(),
-      enquiryDate: (data['enquiryDate'] as Timestamp?)?.toDate(),
-      enquiryNo: data['enquiryNo'] ?? '',
-      siteLocation: data['siteLocation'] ?? '',
-      projectType: data['projectType'] ?? 'Residential',
-      notIncluded:
-          ((data['notIncluded'] as List?) ?? []).map((e) => e.toString()).toList(),
+      id: apiString(data['id']),
+      leadId: apiString(data['leadId']),
+      quoteNumber: apiString(data['quoteNumber']),
+      status: apiString(data['status'], 'draft'),
+      preparedForName: apiString(data['preparedForName']),
+      preparedForPhone: apiString(data['preparedForPhone']),
+      preparedForEmail: apiString(data['preparedForEmail']),
+      preparedForAddress: apiString(data['preparedForAddress']),
+      pdfUrl: apiString(data['pdfUrl']),
+      handledBy: apiString(data['handledBy']),
+      designedBy: apiString(data['designedBy']),
+      date: apiDate(data['quoteDate']),
+      validUntil: apiDate(data['validUntil']),
+      enquiryDate: apiDate(data['enquiryDate']),
+      enquiryNo: apiString(data['enquiryNo']),
+      siteLocation: apiString(data['siteLocation']),
+      projectType: apiString(data['projectType'], 'Residential'),
+      notIncluded: apiStringList(data['notIncluded']),
       sections: ((data['sections'] as List?) ?? [])
-          .map((e) => _sectionFromJson(Map<String, dynamic>.from(e)))
+          .map((e) => _sectionFromJson(Map<String, dynamic>.from(e as Map)))
           .toList(),
       discountType: (data['discountType'] == 'percent')
           ? DiscountType.percent
           : DiscountType.flat,
-      discountValue: (data['discountValue'] as num?)?.toDouble() ?? 0,
-      gstPercent: (data['gstPercent'] as num?)?.toDouble() ?? 0,
-      subtotal: (data['subtotal'] as num?)?.toDouble() ?? 0,
-      grandTotal: (data['grandTotal'] as num?)?.toDouble() ?? 0,
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
-      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
-      createdBy: data['createdBy'] ?? '',
+      discountValue: apiDouble(data['discountValue']),
+      gstPercent: apiDouble(data['gstPercent']),
+      subtotal: apiDouble(data['subtotal']),
+      grandTotal: apiDouble(data['grandTotal']),
+      createdAt: apiDate(data['createdAt']),
+      updatedAt: apiDate(data['updatedAt']),
     );
   }
 
@@ -144,11 +144,10 @@ class QuoteModel extends QuoteEntity {
         createdBy: e.createdBy,
       );
 
-  /// Firestore payload. Dates are written as Timestamps; server timestamps for
-  /// createdAt/updatedAt are added by the datasource.
+  /// POST/PATCH /quotes body. The server assigns the quote number and
+  /// recomputes subtotal/grandTotal from the sections, so they are not sent.
   Map<String, dynamic> toJson() => {
-        'leadId': leadId,
-        'quoteNumber': quoteNumber,
+        'leadId': leadId.isEmpty ? null : leadId,
         'status': status,
         'preparedForName': preparedForName,
         'preparedForPhone': preparedForPhone,
@@ -157,19 +156,16 @@ class QuoteModel extends QuoteEntity {
         'pdfUrl': pdfUrl,
         'handledBy': handledBy,
         'designedBy': designedBy,
-        'date': date != null ? Timestamp.fromDate(date!) : null,
-        'validUntil': validUntil != null ? Timestamp.fromDate(validUntil!) : null,
-        'enquiryDate': enquiryDate != null ? Timestamp.fromDate(enquiryDate!) : null,
+        'quoteDate': apiTimestamp(date),
+        'validUntil': apiTimestamp(validUntil),
+        'enquiryDate': apiTimestamp(enquiryDate),
         'enquiryNo': enquiryNo,
         'siteLocation': siteLocation,
         'projectType': projectType,
         'notIncluded': notIncluded,
         'sections': sections.map(_sectionToJson).toList(),
-        'discountType': discountType.name,
+        'discountType': discountType == DiscountType.percent ? 'percent' : 'amount',
         'discountValue': discountValue,
         'gstPercent': gstPercent,
-        'subtotal': subtotal,
-        'grandTotal': grandTotal,
-        'createdBy': createdBy,
       };
 }

@@ -1,102 +1,58 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:velan_spaces_flutter/core/api/api_client.dart';
+import 'package:velan_spaces_flutter/core/api/api_parse.dart';
+import 'package:velan_spaces_flutter/core/api/polling.dart';
 import 'package:velan_spaces_flutter/data/models/notification_model.dart';
 
+/// Notifications of the signed-in user, read through the Velan API.
+/// The server creates notifications (and sends the push) when the underlying
+/// event happens, so the app only reads and manages them.
 class NotificationDatasource {
-  final FirebaseFirestore _firestore;
+  NotificationDatasource(this._api);
 
-  NotificationDatasource(this._firestore);
+  final ApiClient _api;
 
-  /// Watch notifications for a specific user (by their role-based uid)
-  Stream<List<NotificationModel>> watchNotifications(String userId) {
-    return _firestore
-        .collection('users')
-        .doc(userId)
-        .collection('notifications')
-        .orderBy('createdAt', descending: true)
-        .limit(50)
-        .snapshots()
-        .map((snap) =>
-            snap.docs.map((d) => NotificationModel.fromSnapshot(d)).toList());
+  static const topic = 'notifications';
+
+  /// Latest notifications (newest first, the API returns up to 100).
+  Stream<List<NotificationModel>> watchNotifications() {
+    return pollJson<List<NotificationModel>>(
+      fetchJson: () => _api.get('/notifications'),
+      map: (json) => (json as List? ?? const [])
+          .whereType<Map>()
+          .map((m) => NotificationModel.fromApi(Map<String, dynamic>.from(m)))
+          .toList(),
+      topics: const [topic],
+    );
   }
 
-  /// Mark a single notification as read
-  Future<void> markAsRead(String userId, String notificationId) async {
-    await _firestore
-        .collection('users')
-        .doc(userId)
-        .collection('notifications')
-        .doc(notificationId)
-        .update({'isRead': true});
+  Stream<int> watchUnreadCount() {
+    return pollJson<int>(
+      fetchJson: () => _api.get('/notifications/unread-count'),
+      map: (json) => json is Map ? (apiInt(json['unread']) ?? 0) : 0,
+      topics: const [topic],
+    );
   }
 
-  /// Mark all notifications as read
-  Future<void> markAllAsRead(String userId) async {
-    final batch = _firestore.batch();
-    final unread = await _firestore
-        .collection('users')
-        .doc(userId)
-        .collection('notifications')
-        .where('isRead', isEqualTo: false)
-        .get();
+  void _changed() => ApiInvalidation.instance.notify(topic);
 
-    for (final doc in unread.docs) {
-      batch.update(doc.reference, {'isRead': true});
-    }
-
-    await batch.commit();
+  Future<void> markAsRead(String notificationId) async {
+    await _api.patch('/notifications/$notificationId/read');
+    _changed();
   }
 
-  /// Delete a notification
-  Future<void> deleteNotification(String userId, String notificationId) async {
-    await _firestore
-        .collection('users')
-        .doc(userId)
-        .collection('notifications')
-        .doc(notificationId)
-        .delete();
+  Future<void> markAllAsRead() async {
+    await _api.post('/notifications/read-all');
+    _changed();
   }
 
-  /// Clear all notifications
-  Future<void> clearAll(String userId) async {
-    final batch = _firestore.batch();
-    final all = await _firestore
-        .collection('users')
-        .doc(userId)
-        .collection('notifications')
-        .get();
-
-    for (final doc in all.docs) {
-      batch.delete(doc.reference);
-    }
-
-    await batch.commit();
+  Future<void> deleteNotification(String notificationId) async {
+    await _api.delete('/notifications/$notificationId');
+    _changed();
   }
 
-  /// Send a notification to a user (used by Cloud Functions, but also available client-side)
-  Future<void> sendNotification({
-    required String targetUserId,
-    required String title,
-    required String body,
-    required String type,
-    String projectId = '',
-    String projectName = '',
-    String senderId = '',
-    String senderName = '',
-  }) async {
-    await _firestore
-        .collection('users')
-        .doc(targetUserId)
-        .collection('notifications')
-        .add({
-      'title': title,
-      'body': body,
-      'type': type,
-      'projectId': projectId,
-      'projectName': projectName,
-      'senderId': senderId,
-      'senderName': senderName,
-      'isRead': false,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+  /// Deletes the caller's READ notifications; unread ones stay.
+  Future<void> clearRead() async {
+    await _api.delete('/notifications');
+    _changed();
   }
 }

@@ -1,13 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:velan_spaces_flutter/data/datasources/lead_datasource.dart';
+import 'package:velan_spaces_flutter/data/datasources/api_lead_datasource.dart';
 import 'package:velan_spaces_flutter/data/models/lead_model.dart';
 import 'package:velan_spaces_flutter/domain/entities/lead_entity.dart';
 import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart';
 
 // ─── Datasource Provider ─────────────────────────────────────────────────
-final leadDatasourceProvider = Provider<LeadDatasource>((ref) {
-  final firestore = ref.watch(firestoreProvider);
-  return LeadDatasource(firestore);
+final leadDatasourceProvider = Provider<ApiLeadDatasource>((ref) {
+  return ApiLeadDatasource(ref.watch(apiClientProvider));
 });
 
 // ─── All Leads Stream ────────────────────────────────────────────────────
@@ -27,7 +26,7 @@ class LeadController extends StateNotifier<AsyncValue<void>> {
 
   LeadController(this._ref) : super(const AsyncValue.data(null));
 
-  LeadDatasource get _datasource => _ref.read(leadDatasourceProvider);
+  ApiLeadDatasource get _datasource => _ref.read(leadDatasourceProvider);
 
   Future<bool> addLead({
     required String clientName,

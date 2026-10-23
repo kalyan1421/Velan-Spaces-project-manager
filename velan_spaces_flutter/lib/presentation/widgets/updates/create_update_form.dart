@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:velan_spaces_flutter/domain/entities/project_update_entity.dart';
 import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart';
-import 'package:velan_spaces_flutter/presentation/providers/notification_providers.dart';
 import 'package:velan_spaces_flutter/presentation/providers/project_providers.dart';
 import 'package:video_player/video_player.dart';
 import 'package:velan_spaces_flutter/core/services/media_compression_service.dart';
@@ -249,23 +248,6 @@ class _CreateUpdateFormState extends ConsumerState<CreateUpdateForm> {
 
       await repo.addUpdate(widget.projectId, update);
 
-      // ─── Notification trigger ─────────────────────────────
-      try {
-        setState(() => _uploadStage = 'Sending notifications');
-        final ns = ref.read(notificationServiceProvider);
-        // Fetch project to get managerIds
-        final project = await repo.getProjectById(widget.projectId)
-            .then((r) => r.fold((_) => null, (p) => p));
-        await ns.dispatchUpdateNotification(
-          senderRole: role,
-          senderId: meta['id'] as String? ?? '',
-          senderName: meta['name'] as String? ?? 'Unknown',
-          projectId: widget.projectId,
-          projectName: project?.projectName ?? '',
-          managerIds: project?.managerIds ?? [],
-        );
-      } catch (_) {}
-      // ─────────────────────────────────────────────────────
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -250,6 +250,9 @@ class _QuotationSettingsScreenState
 
   Widget _imageRow(String label, String url, String key, {bool wide = false}) {
     final uploading = _uploadingKey == key;
+    // A freshly uploaded image is an sb:// storage reference (not viewable
+    // until saved); show an "uploaded" tick instead of a broken preview.
+    final isRef = url.startsWith('sb://');
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -261,13 +264,15 @@ class _QuotationSettingsScreenState
               color: Colors.grey.shade100,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: Colors.grey.shade300),
-              image: url.isNotEmpty
+              image: url.isNotEmpty && !isRef
                   ? DecorationImage(image: NetworkImage(url), fit: BoxFit.cover)
                   : null,
             ),
             child: url.isEmpty
                 ? Icon(Icons.image_outlined, color: Colors.grey.shade400)
-                : null,
+                : isRef
+                    ? const Icon(Icons.check_circle_outline, color: Color(0xFF22C55E))
+                    : null,
           ),
           const SizedBox(width: 12),
           Expanded(

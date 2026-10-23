@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:velan_spaces_flutter/core/api/api_parse.dart';
 import 'package:velan_spaces_flutter/domain/entities/catalog_item_entity.dart';
 import 'package:velan_spaces_flutter/domain/entities/quote_template_entity.dart';
 
@@ -20,16 +20,18 @@ class QuoteTemplateModel extends QuoteTemplateEntity {
         'uom': l.uom,
       };
 
+  static double? _opt(dynamic v) => v == null || v == '' ? null : apiDouble(v);
+
   static QuoteTemplateLine _lineFromJson(Map<String, dynamic> j) =>
       QuoteTemplateLine(
-        catalogItemId: j['catalogItemId'] ?? '',
-        name: j['name'] ?? '',
+        catalogItemId: apiString(j['catalogItemId']),
+        name: apiString(j['name']),
         itemType: CatalogItemTypeX.fromName(j['itemType'] as String?),
-        variantLabel: j['variantLabel'] ?? '',
-        defaultLengthMm: (j['defaultLengthMm'] as num?)?.toDouble(),
-        defaultHeightMm: (j['defaultHeightMm'] as num?)?.toDouble(),
-        defaultQty: (j['defaultQty'] as num?)?.toDouble(),
-        uom: j['uom'] ?? '',
+        variantLabel: apiString(j['variantLabel']),
+        defaultLengthMm: _opt(j['defaultLengthMm']),
+        defaultHeightMm: _opt(j['defaultHeightMm']),
+        defaultQty: _opt(j['defaultQty']),
+        uom: apiString(j['uom']),
       );
 
   static Map<String, dynamic> _sectionToJson(QuoteTemplateSection s) => {
@@ -40,20 +42,19 @@ class QuoteTemplateModel extends QuoteTemplateEntity {
 
   static QuoteTemplateSection _sectionFromJson(Map<String, dynamic> j) =>
       QuoteTemplateSection(
-        title: j['title'] ?? '',
+        title: apiString(j['title']),
         type: CatalogItemTypeX.fromName(j['type'] as String?),
         lines: ((j['lines'] as List?) ?? [])
-            .map((e) => _lineFromJson(Map<String, dynamic>.from(e)))
+            .map((e) => _lineFromJson(Map<String, dynamic>.from(e as Map)))
             .toList(),
       );
 
-  factory QuoteTemplateModel.fromSnapshot(DocumentSnapshot snap) {
-    final data = snap.data() as Map<String, dynamic>? ?? {};
+  factory QuoteTemplateModel.fromJson(Map<String, dynamic> data) {
     return QuoteTemplateModel(
-      id: snap.id,
-      name: data['name'] ?? '',
+      id: apiString(data['id']),
+      name: apiString(data['name']),
       sections: ((data['sections'] as List?) ?? [])
-          .map((e) => _sectionFromJson(Map<String, dynamic>.from(e)))
+          .map((e) => _sectionFromJson(Map<String, dynamic>.from(e as Map)))
           .toList(),
     );
   }
