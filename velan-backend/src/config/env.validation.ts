@@ -64,6 +64,17 @@ export const envSchema = z.object({
   MAIL_FROM: z.preprocess(blankToUndefined, z.string().optional()),
   // Comma-separated recipients of website-enquiry emails. Unset = all active heads.
   ENQUIRY_NOTIFY_EMAILS: z.preprocess(blankToUndefined, z.string().optional()),
+
+  // Forced-update gate served at GET /public/app-version. Mobile builds older
+  // than MIN_APP_VERSION (semver) are told to update. 0.0.0 = never force.
+  MIN_APP_VERSION: z.preprocess(
+    blankToUndefined,
+    z
+      .string()
+      .regex(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/, 'must be a semver like 1.2.0')
+      .default('0.0.0'),
+  ),
+  MIN_APP_MESSAGE: z.preprocess(blankToUndefined, z.string().default('Please update the app to continue.')),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -311,6 +311,34 @@ export class AccountsService {
     return (data ?? []).map((r) => ({ ...r, status: linkStatus(r) }));
   }
 
+  /** Revoke a still-pending invite by deleting it, which kills its link. */
+  async revokeClientInvite(actor: AuthenticatedUser, projectId: string, id: string) {
+    await this.access.assertMember(actor, projectId);
+    const { data, error } = await this.db()
+      .from('account_links')
+      .select('id, expires_at, used_at')
+      .eq('id', id)
+      .eq('kind', 'client_invite')
+      .eq('project_id', projectId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) throw new NotFoundException('Invite not found');
+    if (linkStatus(data) !== 'valid') {
+      throw new ConflictException('Only pending invites can be revoked');
+    }
+    // Re-check pending-ness in the delete so a concurrent accept cannot be undone.
+    const { data: deleted, error: delErr } = await this.db()
+      .from('account_links')
+      .delete()
+      .eq('id', id)
+      .is('used_at', null)
+      .select('id')
+      .maybeSingle();
+    if (delErr) throw new Error(delErr.message);
+    if (!deleted) throw new ConflictException('Only pending invites can be revoked');
+    return { revoked: true };
+  }
+
   async describeInvite(token: string) {
     const link = await this.findLink(token, 'client_invite');
     const { data: project } = await this.db()
@@ -476,9 +504,21 @@ class AccountsController {
   @Get('projects/:projectId/client-invites')
   @Roles('head', 'manager')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Invites for a project with status (valid/used/expired)' })
+  @ApiOperation({ summary: 'Invites for a project: id, email, status (valid = pending / used = accepted / expired)' })
   listInvites(@CurrentUser() u: AuthenticatedUser, @Param('projectId', ParseUUIDPipe) projectId: string) {
     return this.svc.listClientInvites(u, projectId);
+  }
+
+  @Delete('projects/:projectId/client-invites/:id')
+  @Roles('head', 'manager')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Revoke a pending client invite (its link stops working)' })
+  revokeInvite(
+    @CurrentUser() u: AuthenticatedUser,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.svc.revokeClientInvite(u, projectId, id);
   }
 
   @Public()

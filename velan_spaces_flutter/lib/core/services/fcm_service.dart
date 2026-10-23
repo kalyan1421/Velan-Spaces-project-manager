@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -5,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:velan_spaces_flutter/core/api/api_client.dart';
+import 'package:velan_spaces_flutter/core/navigation/notification_navigation.dart';
 
 /// Background message handler — MUST be a top-level function
 @pragma('vm:entry-point')
@@ -30,6 +32,23 @@ class FCMService {
   final FirebaseMessaging _fcm = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotif = FlutterLocalNotificationsPlugin();
 
+  // Listeners are registered once per initialize() and cancelled before the
+  // next one, so repeated sign-ins never duplicate them.
+  StreamSubscription<String>? _tokenRefreshSub;
+  StreamSubscription<RemoteMessage>? _messageSub;
+  StreamSubscription<RemoteMessage>? _openedSub;
+  bool _initialMessageHandled = false;
+
+  Future<void> _cancelListeners() async {
+    final subs = [_tokenRefreshSub, _messageSub, _openedSub];
+    _tokenRefreshSub = null;
+    _messageSub = null;
+    _openedSub = null;
+    for (final s in subs) {
+      await s?.cancel();
+    }
+  }
+
   /// Android notification channel — must match AndroidManifest meta-data
   static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
     'velan_spaces_notifications',
@@ -43,8 +62,9 @@ class FCMService {
   /// (e.g. 'head' for admin, manager.id for managers).
   Future<void> initialize({
     required String userId,
-    required void Function(String projectId) onNotificationTap,
+    required void Function(NotificationTarget target) onNotificationTap,
   }) async {
+    await _cancelListeners();
     // ─── 1. Request OS permission ──────────────────────────────────────
     // Note: onBackgroundMessage is registered once in main.dart (top-level)
     final settings = await _fcm.requestPermission(
@@ -84,9 +104,7 @@ class FCMService {
         ),
       ),
       onDidReceiveNotificationResponse: (response) {
-        // Payload is projectId
-        final projectId = response.payload ?? '';
-        if (projectId.isNotEmpty) onNotificationTap(projectId);
+        onNotificationTap(NotificationTarget.fromPayload(response.payload));
       },
     );
 
@@ -102,12 +120,12 @@ class FCMService {
     await _saveTokenForUser(userId);
 
     // Token refresh listener
-    _fcm.onTokenRefresh.listen((newToken) {
+    _tokenRefreshSub = _fcm.onTokenRefresh.listen((newToken) {
       _registerToken(userId, newToken);
     });
 
     // ─── 6. Foreground message listener ────────────────────────────────
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    _messageSub = FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       if (kDebugMode) {
         print('🔔 [FCM Foreground] ${message.notification?.title}: ${message.notification?.body}');
       }
@@ -115,23 +133,19 @@ class FCMService {
     });
 
     // ─── 7. Background tap (app in background) ─────────────────────────
-    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+    _openedSub = FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       if (kDebugMode) print('🔔 [FCM Tap] ${message.data}');
-      final projectId = message.data['projectId'] as String? ?? '';
-      if (projectId.isNotEmpty) onNotificationTap(projectId);
+      onNotificationTap(NotificationTarget.fromMap(message.data));
     });
 
     // ─── 8. Terminated tap (app was killed) ────────────────────────────
-    final initial = await _fcm.getInitialMessage();
+    final initial = _initialMessageHandled ? null : await _fcm.getInitialMessage();
     if (initial != null) {
-      final projectId = initial.data['projectId'] as String? ?? '';
-      if (kDebugMode) print('🔔 [FCM Cold start] projectId=$projectId');
-      if (projectId.isNotEmpty) {
-        // Delay to let app fully initialize before navigating
-        Future.delayed(const Duration(milliseconds: 800), () {
-          onNotificationTap(projectId);
-        });
-      }
+      _initialMessageHandled = true; // only the cold-start tap, once
+      final target = NotificationTarget.fromMap(initial.data);
+      if (kDebugMode) print('🔔 [FCM Cold start] ${initial.data}');
+      // Delay to let app fully initialize before navigating
+      Future.delayed(const Duration(milliseconds: 800), () => onNotificationTap(target));
     }
   }
 
@@ -140,7 +154,7 @@ class FCMService {
     final notification = message.notification;
     if (notification == null) return;
 
-    final projectId = message.data['projectId'] as String? ?? '';
+    final payload = NotificationTarget.fromMap(message.data).toPayload();
 
     _localNotif.show(
       notification.hashCode,
@@ -163,7 +177,7 @@ class FCMService {
           presentSound: true,
         ),
       ),
-      payload: projectId, // used for tap navigation
+      payload: payload, // used for tap navigation
     );
   }
 
@@ -196,6 +210,7 @@ class FCMService {
   /// Call on logout, while the session is still valid, to stop pushes to
   /// this device.
   Future<void> signOut(String userId) async {
+    await _cancelListeners();
     try {
       final token = await _fcm.getToken();
       if (token != null && userId.isNotEmpty) {

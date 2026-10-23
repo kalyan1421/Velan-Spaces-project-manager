@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:velan_spaces_flutter/core/navigation/notification_navigation.dart';
 import 'package:velan_spaces_flutter/core/utils/bottom_sheet_utils.dart';
+import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart';
 import 'package:velan_spaces_flutter/domain/entities/notification_entity.dart';
 import 'package:velan_spaces_flutter/presentation/providers/notification_providers.dart';
 
@@ -232,10 +234,17 @@ class NotificationsScreen extends ConsumerWidget {
                   .markAsRead(notification.id);
             }
 
-            // Navigate to project
-            if (notification.projectId.isNotEmpty) {
-              context.push('/project/${notification.projectId}');
-            }
+            // Open the related project / lead (no-op when ids are missing).
+            AppNavigation.open(
+              NotificationTarget(
+                projectId: notification.projectId,
+                leadId: notification.leadId,
+                entityId: notification.entityId,
+                type: notification.type,
+              ),
+              router: GoRouter.of(context),
+              role: ref.read(currentUserRoleProvider),
+            );
           },
           child: Padding(
             padding:

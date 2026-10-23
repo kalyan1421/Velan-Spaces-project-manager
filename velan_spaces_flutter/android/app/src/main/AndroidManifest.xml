@@ -42,6 +42,31 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+
+            <!-- Deep links handled by the app_links package, not Flutter's default. -->
+            <meta-data android:name="flutter_deeplinking_enabled" android:value="false" />
+
+            <!-- velanspaces://invite/<token>, velanspaces://reset-password/<token> -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="velanspaces" android:host="invite"/>
+                <data android:scheme="velanspaces" android:host="reset-password"/>
+            </intent-filter>
+
+            <!-- TODO(client): https App Links. Needs the confirmed production domain
+                 AND https://<domain>/.well-known/assetlinks.json (package
+                 com.velanspaces.velan_spaces_flutter + release SHA-256). Then also
+                 build with --dart-define=APP_WEB_HOST=<domain>.
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https" android:host="YOUR_DOMAIN" android:pathPrefix="/invite/"/>
+                <data android:scheme="https" android:host="YOUR_DOMAIN" android:pathPrefix="/reset-password/"/>
+            </intent-filter>
+            -->
         </activity>
 
         <!-- FCM default notification channel and icon -->

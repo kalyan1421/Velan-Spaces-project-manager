@@ -7,6 +7,7 @@ import 'package:velan_spaces_flutter/core/api/api_client.dart';
 import 'package:velan_spaces_flutter/core/api/api_config.dart';
 import 'package:velan_spaces_flutter/core/api/api_exception.dart';
 import 'package:velan_spaces_flutter/core/api/token_store.dart';
+import 'package:velan_spaces_flutter/core/navigation/notification_navigation.dart';
 import 'package:velan_spaces_flutter/core/services/fcm_service.dart';
 import 'package:velan_spaces_flutter/core/session_service.dart';
 import 'package:velan_spaces_flutter/data/datasources/api_worker_manager_datasource.dart';
@@ -231,11 +232,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserEntity?>> {
     try {
       await FCMService.instance.initialize(
         userId: userId,
-        onNotificationTap: (projectId) {
-          // Navigation is not available here (no BuildContext).
-          // The App widget listens to FCM taps via GoRouter.
-          if (kDebugMode) print('🔔 Notification tap → project: $projectId');
-        },
+        onNotificationTap: (target) => AppNavigation.open(target),
       );
     } catch (e) {
       if (kDebugMode) print('⚠️ FCM init error: $e');

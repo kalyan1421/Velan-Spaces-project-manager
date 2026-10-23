@@ -7,6 +7,10 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:velan_spaces_flutter/app.dart';
 import 'package:velan_spaces_flutter/core/api/polling.dart';
+import 'package:velan_spaces_flutter/core/app_version.dart';
+import 'package:velan_spaces_flutter/core/deep_links.dart';
+import 'package:velan_spaces_flutter/core/navigation/notification_navigation.dart';
+import 'package:velan_spaces_flutter/core/router.dart';
 import 'package:velan_spaces_flutter/firebase_options.dart';
 import 'package:velan_spaces_flutter/core/services/fcm_service.dart';
 import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart';
@@ -37,6 +41,12 @@ Future<void> main() async {
   // Create the Riverpod container so we can restore session before the UI runs
   final container = ProviderContainer();
 
+  // Forced-update check runs alongside session restore. It fails open: errors
+  // and timeouts never block, and a late answer still shows the gate.
+  final versionCheck = checkForRequiredUpdate().then((r) {
+    if (r != null) container.read(updateRequirementProvider.notifier).state = r;
+  });
+
   // Attempt to restore the previous session from secure storage
   String? fcmUserId;
   try {
@@ -54,12 +64,16 @@ Future<void> main() async {
     if (kDebugMode) print('⚠️ Session restore failed: $e');
   }
 
+  await versionCheck.timeout(const Duration(seconds: 2), onTimeout: () {});
+
   runApp(
     UncontrolledProviderScope(
       container: container,
       child: const App(),
     ),
   );
+
+  unawaited(DeepLinkService.instance.start(container.read(routerProvider)));
 
   // Initialize FCM for the restored user AFTER the first frame is requested.
   // It talks to APNs/network, so it must never block app startup.
@@ -68,9 +82,7 @@ Future<void> main() async {
       FCMService.instance
           .initialize(
             userId: fcmUserId,
-            onNotificationTap: (_) {
-              // Navigation handled inside App widget via GoRouter
-            },
+            onNotificationTap: (target) => AppNavigation.open(target),
           )
           .timeout(const Duration(seconds: 30))
           .catchError((Object e) {

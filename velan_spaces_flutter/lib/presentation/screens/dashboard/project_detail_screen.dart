@@ -174,6 +174,8 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
                             context.push('/project/${project.id}/edit');
                           } else if (value == 'assign') {
                             _showAssignManagerSheet(context, project);
+                          } else if (value == 'client_access') {
+                            context.push('/project/${project.id}/client-access');
                           } else if (value == 'invite') {
                             showFormBottomSheet(
                               context: context,
@@ -201,6 +203,16 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
                                 Icon(Icons.mark_email_unread_outlined, size: 18),
                                 SizedBox(width: 10),
                                 Text('Invite Client'),
+                              ],
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'client_access',
+                            child: Row(
+                              children: [
+                                Icon(Icons.vpn_key_outlined, size: 18),
+                                SizedBox(width: 10),
+                                Text('Client access'),
                               ],
                             ),
                           ),

@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:velan_spaces_flutter/domain/entities/lead_entity.dart';
+import 'package:velan_spaces_flutter/domain/entities/user_role.dart';
+import 'package:velan_spaces_flutter/presentation/providers/auth_providers.dart';
 import 'package:velan_spaces_flutter/presentation/providers/lead_providers.dart';
 
 class SalesScreen extends ConsumerStatefulWidget {
@@ -253,7 +255,10 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
 
     return Dismissible(
       key: ValueKey(lead.id),
-      direction: DismissDirection.endToStart,
+      // Only the head may delete leads (the server answers 403 to managers).
+      direction: ref.watch(currentUserRoleProvider) == UserRole.head
+          ? DismissDirection.endToStart
+          : DismissDirection.none,
       background: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 24),

@@ -4,5 +4,13 @@
 <dict>
 	<key>aps-environment</key>
 	<string>development</string>
+	<!-- TODO(client): Universal Links. Needs the confirmed production domain, the
+	     Associated Domains capability on the App ID/profile, and
+	     https://<domain>/.well-known/apple-app-site-association. Then add:
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:YOUR_DOMAIN</string>
+	</array>
+	-->
 </dict>
 </plist>
