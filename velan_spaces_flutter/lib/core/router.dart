@@ -9,6 +9,9 @@ import 'package:velan_spaces_flutter/presentation/screens/dashboard/manager_dash
 import 'package:velan_spaces_flutter/presentation/screens/dashboard/worker_dashboard_screen.dart';
 import 'package:velan_spaces_flutter/presentation/screens/dashboard/client_dashboard_screen.dart';
 import 'package:velan_spaces_flutter/presentation/screens/dashboard/project_detail_screen.dart';
+import 'package:velan_spaces_flutter/core/navigation/notification_navigation.dart';
+import 'package:velan_spaces_flutter/presentation/screens/auth/link_password_screen.dart';
+import 'package:velan_spaces_flutter/presentation/screens/project/client_access_screen.dart';
 import 'package:velan_spaces_flutter/presentation/screens/profile_screen.dart';
 import 'package:velan_spaces_flutter/presentation/screens/staff_screen.dart';
 import 'package:velan_spaces_flutter/presentation/screens/sales_screen.dart';
@@ -38,12 +41,15 @@ final routerProvider = Provider<GoRouter>((ref) {
     (_, next) => authNotifier.value = next,
   );
 
-  return GoRouter(
+  final router = GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/login',
     refreshListenable: authNotifier,
     redirect: (context, state) {
       final role = ref.read(currentUserRoleProvider);
+      // Invite / reset links work signed in or out.
+      final loc = state.matchedLocation;
+      if (loc.startsWith('/invite/') || loc.startsWith('/reset-password/')) return null;
       final isLoginRoute = state.matchedLocation == '/login';
 
       if (role == UserRole.unknown) {
@@ -68,6 +74,32 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => ProjectDetailScreen(
           projectId: state.pathParameters['projectId']!,
+        ),
+      ),
+
+      GoRoute(
+        path: '/project/:projectId/client-access',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => ClientAccessScreen(
+          projectId: state.pathParameters['projectId']!,
+        ),
+      ),
+
+      // ── Links opened from invites / password resets ─────────────────
+      GoRoute(
+        path: '/invite/:token',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => LinkPasswordScreen(
+          kind: LinkKind.invite,
+          token: state.pathParameters['token']!,
+        ),
+      ),
+      GoRoute(
+        path: '/reset-password/:token',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => LinkPasswordScreen(
+          kind: LinkKind.reset,
+          token: state.pathParameters['token']!,
         ),
       ),
 
@@ -228,6 +260,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
     ],
   );
+  AppNavigation.bind(router, () => ref.read(currentUserRoleProvider));
+  return router;
 });
 
 String _initialRouteForRole(UserRole role) {

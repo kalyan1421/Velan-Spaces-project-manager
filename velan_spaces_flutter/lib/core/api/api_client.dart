@@ -42,6 +42,9 @@ class ApiClient {
 
   Future<dynamic> delete(String path) => _send('DELETE', path);
 
+  /// GET without credentials or refresh/retry (public endpoints).
+  Future<dynamic> getPublic(String path) => _send('GET', path, authenticated: false);
+
   /// Calls that must not trigger refresh/retry (login, refresh itself).
   Future<dynamic> postPublic(String path, Object? body) =>
       _send('POST', path, body: body, authenticated: false);

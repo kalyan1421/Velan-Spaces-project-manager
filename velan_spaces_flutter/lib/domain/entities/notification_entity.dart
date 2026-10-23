@@ -9,6 +9,8 @@ class NotificationEntity {
     required this.type,
     this.projectId = '',
     this.projectName = '',
+    this.leadId = '',
+    this.entityId = '',
     this.senderId = '',
     this.senderName = '',
     this.isRead = false,
@@ -21,6 +23,8 @@ class NotificationEntity {
   final String type;        // update, design, settlement, status_change, assignment, chat, complaint
   final String projectId;
   final String projectName;
+  final String leadId;
+  final String entityId;
   final String senderId;
   final String senderName;
   final bool isRead;

@@ -30,6 +30,19 @@
 		<string>$(FLUTTER_BUILD_NUMBER)</string>
 		<key>ITSAppUsesNonExemptEncryption</key>
 		<false/>
+		<key>FlutterDeepLinkingEnabled</key>
+		<false/>
+		<key>CFBundleURLTypes</key>
+		<array>
+			<dict>
+				<key>CFBundleURLName</key>
+				<string>com.velanspaces.velanSpacesFlutter</string>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>velanspaces</string>
+				</array>
+			</dict>
+		</array>
 		<key>LSApplicationQueriesSchemes</key>
 		<array>
 			<string>https</string>
